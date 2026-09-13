@@ -56,9 +56,12 @@ To compare deployed code with a checkout after an update, compare the two Python
 | `icloud-backup tick` | Back up only when due; used by the scheduler |
 | `icloud-backup verify` | Check backup-store structure |
 | `icloud-backup verify --full` | Read and check all stored data |
+| `icloud-backup download` | Materialize and verify the configured Restic repository now |
 | `icloud-backup watch` | Manual compatibility check with alerts; the scheduled independent watchdog is `watch.py` |
 
 Prefix commands with `~/bin/` if that directory is not on your shell's search path. Config selection follows [the documented precedence](configuration.md#changes-and-precedence). A separate verification command does not create a backup or mark missing sources protected.
+
+`download` reports the cloud-only file count and logical size, rejects insufficient immediately free space before starting, reads and authenticates all Restic data, and verifies that every initial candidate became local and readable. Its success is a point-in-time result because macOS may evict files later. It does not promote pending snapshots, clear a backup warning, or mark a failed backup cycle successful.
 
 ```sh
 icloud-backup restore projects --snapshot SNAPSHOT_ID --target "$HOME/Downloads/recovered-projects"

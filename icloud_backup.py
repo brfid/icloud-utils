@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -24,13 +25,14 @@ import tomllib
 import unicodedata
 import uuid
 
-VERSION = '2.0.1'
+VERSION = '2.1.0'
 MANAGED = 'icloud-backup-v2'
 DEFAULT_CONFIG = Path.home() / '.config/icloud_backup/config.toml'
 DEFAULT_SUPPORT = Path.home() / 'Library/Application Support/icloud-backup'
 STALE_HOURS = 36
 RESTIC_LOCKED = 11
 LOCK_RETRY = '3m'
+SF_DATALESS = getattr(stat, 'SF_DATALESS', 0x40000000)
 
 
 def now():
@@ -104,6 +106,13 @@ class Source:
     path: Path
     excludes: tuple[str, ...] = ()
     allow_empty: bool = False
+
+
+@dataclass(frozen=True)
+class RepositoryFile:
+    """A regular cloud-only repository file and its initial logical size."""
+    path: Path
+    size: int
 
 
 @dataclass(frozen=True)
@@ -240,6 +249,55 @@ def preflight_source(source):
         raise RuntimeError(f'{source.name}: source is empty after exclusions; set allow_empty=true if intentional')
 
 
+def file_status(path):
+    """Stat without following links, kept separate for platform-focused tests."""
+    return path.stat(follow_symlinks=False)
+
+
+def repository_dataless_files(repository):
+    """Inventory native cloud-only regular files, excluding transient locks."""
+    found = []
+    def walk_error(error):
+        raise error
+    for base, directories, files in os.walk(repository, followlinks=False, onerror=walk_error):
+        base = Path(base)
+        if base == repository:
+            directories[:] = [name for name in directories if name != 'locks']
+        for name in files:
+            path = base / name
+            info = file_status(path)
+            if stat.S_ISREG(info.st_mode) and getattr(info, 'st_flags', 0) & SF_DATALESS:
+                found.append(RepositoryFile(path, info.st_size))
+    return tuple(found)
+
+
+def probe_readable(path):
+    """Open a materialized file and prove that at least one read is permitted."""
+    with path.open('rb') as f:
+        f.read(1)
+
+
+def verify_materialized(candidates):
+    """Require every initial cloud-only candidate to be local and readable now."""
+    problems = []
+    for candidate in candidates:
+        try:
+            info = file_status(candidate.path)
+            if not stat.S_ISREG(info.st_mode):
+                problems.append((candidate.path, 'is no longer a regular file'))
+            elif getattr(info, 'st_flags', 0) & SF_DATALESS:
+                problems.append((candidate.path, 'is still data-less'))
+            else:
+                probe_readable(candidate.path)
+        except OSError as exc:
+            problems.append((candidate.path, f'is missing or unreadable: {exc}'))
+    if problems:
+        details = '; '.join(f'{path}: {reason}' for path, reason in problems[:5])
+        if len(problems) > 5:
+            details += f'; and {len(problems) - 5} more'
+        raise RuntimeError(f'{len(problems)} repository file(s) failed the materialization postcondition: {details}')
+
+
 def notify(message):
     if sys.platform != 'darwin':
         return
@@ -309,6 +367,16 @@ class App:
                 path = path.parent
             if shutil.disk_usage(path).free < self.c.reserve_mib * 1024**2:
                 raise RuntimeError(f'less than {self.c.reserve_mib} MiB immediately free; stopped to preserve space')
+
+    def materialization_space_check(self, logical_size):
+        """Require room for cloud-only bytes while preserving the configured reserve."""
+        free = shutil.disk_usage(self.c.repository).free
+        reserve = self.c.reserve_mib * 1024**2
+        if free < logical_size + reserve:
+            raise RuntimeError(
+                f'repository download needs {logical_size:,} bytes plus the {reserve:,}-byte free-space reserve, '
+                f'but only {free:,} bytes are immediately free')
+        return free
 
     def engine(self, *args, extra_space=(), no_lock=False, retry_lock=True):
         """Run Restic with explicit repository, empty password, and local guards.
@@ -385,6 +453,23 @@ class App:
         """Verify identity without a Restic lock, then remove only stale locks."""
         self.identity()
         self.engine('unlock', retry_lock=False)
+
+    def download(self):
+        """Materialize and authenticate all currently cloud-only repository data."""
+        with run_lock(self.c.state_dir / 'run.lock'):
+            started = time.monotonic()
+            self.prepare_repository()
+            candidates = repository_dataless_files(self.c.repository)
+            logical_size = sum(item.size for item in candidates)
+            free = self.materialization_space_check(logical_size)
+            print(f'Repository download: {len(candidates)} cloud-only file(s), {logical_size:,} bytes; '
+                  f'{free:,} bytes immediately free.')
+            self.engine('check', '--read-data')
+            verify_materialized(candidates)
+            elapsed = time.monotonic() - started
+            print(f'Materialized {len(candidates)} file(s), {logical_size:,} bytes, in {elapsed:.1f}s; '
+                  'full Restic data integrity verification passed.')
+            print('Point-in-time result: macOS may evict repository files again later.')
 
     def initialize(self, connect=False):
         """Explicitly create or verify/register a store; never replace its identity.
@@ -613,7 +698,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=Path(os.environ.get('ICLOUD_BACKUP_CONFIG', DEFAULT_CONFIG)))
     sub = parser.add_subparsers(dest='command', required=True)
-    for name in ['init', 'connect', 'run', 'tick', 'watch', 'snapshots']:
+    for name in ['init', 'connect', 'run', 'tick', 'watch', 'snapshots', 'download']:
         sub.add_parser(name)
     status = sub.add_parser('status'); status.add_argument('--json', action='store_true')
     verify = sub.add_parser('verify'); verify.add_argument('--full', action='store_true')
@@ -635,6 +720,8 @@ def main(argv=None):
             return app.status(as_json=getattr(args, 'json', False), watch=args.command == 'watch')
         elif args.command == 'restore':
             app.restore(args.source, args.snapshot, args.target)
+        elif args.command == 'download':
+            app.download()
         else:
             with run_lock(app.c.state_dir / 'run.lock'):
                 app.prepare_repository()

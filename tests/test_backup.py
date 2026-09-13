@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 import unittest
 from unittest import mock
 
@@ -174,6 +175,58 @@ class ConfigSafety(Fixture):
         self.assertIn('repository is missing',self.app.problems(False))
 
 
+class RepositoryDownload(Fixture):
+    def test_cloud_only_inventory_excludes_locks_and_nonregular_files(self):
+        pack = self.c.repository/'data'/'aa'/'pack'
+        lock = self.c.repository/'locks'/'transient'
+        pack.parent.mkdir(parents=True); lock.parent.mkdir()
+        pack.write_bytes(b'pack data'); lock.write_bytes(b'lock data')
+        link = pack.parent/'link'; link.symlink_to(pack)
+        actual = ib.file_status
+        def dataless(path):
+            info = actual(path)
+            return types.SimpleNamespace(st_mode=info.st_mode, st_size=info.st_size,
+                                         st_flags=ib.SF_DATALESS)
+        with mock.patch.object(ib, 'file_status', side_effect=dataless):
+            found = ib.repository_dataless_files(self.c.repository)
+        self.assertEqual(found, (ib.RepositoryFile(pack, len(b'pack data')),))
+
+    def test_insufficient_space_is_rejected_before_full_read(self):
+        candidate = ib.RepositoryFile(self.root/'pack', 200)
+        self.app.c = dataclasses.replace(self.c, reserve_mib=1)
+        with mock.patch.object(self.app, 'prepare_repository'), \
+             mock.patch.object(ib, 'repository_dataless_files', return_value=(candidate,)), \
+             mock.patch.object(shutil, 'disk_usage', return_value=types.SimpleNamespace(free=1024**2 + 199)), \
+             mock.patch.object(self.app, 'engine') as engine:
+            with self.assertRaisesRegex(RuntimeError, 'plus the .*free-space reserve'):
+                self.app.download()
+        engine.assert_not_called()
+
+    def test_success_runs_full_read_and_requires_zero_dataless_candidates(self):
+        candidate = self.root/'pack'; candidate.write_bytes(b'authenticated pack')
+        item = ib.RepositoryFile(candidate, candidate.stat().st_size)
+        before = dict(self.app.state)
+        with mock.patch.object(self.app, 'prepare_repository'), \
+             mock.patch.object(ib, 'repository_dataless_files', return_value=(item,)), \
+             mock.patch.object(shutil, 'disk_usage', return_value=types.SimpleNamespace(free=10 * 1024**3)), \
+             mock.patch.object(self.app, 'engine') as engine:
+            self.app.download()
+        engine.assert_called_once_with('check', '--read-data')
+        self.assertEqual(self.app.state, before)
+
+    def test_postcondition_rejects_dataless_and_unreadable_candidates(self):
+        candidate = self.root/'pack'; candidate.write_bytes(b'pack')
+        item = ib.RepositoryFile(candidate, 4)
+        actual = ib.file_status(candidate)
+        cloud = types.SimpleNamespace(st_mode=actual.st_mode, st_size=4, st_flags=ib.SF_DATALESS)
+        with mock.patch.object(ib, 'file_status', return_value=cloud):
+            with self.assertRaisesRegex(RuntimeError, 'still data-less'):
+                ib.verify_materialized((item,))
+        with mock.patch.object(ib, 'probe_readable', side_effect=PermissionError('denied')):
+            with self.assertRaisesRegex(RuntimeError, 'unreadable'):
+                ib.verify_materialized((item,))
+
+
 @unittest.skipUnless(RESTIC,'Restic executable required')
 class RealEngine(Fixture):
     def init_run(self):
@@ -273,6 +326,18 @@ class RealEngine(Fixture):
         self.assertIn('interrupted',app.state['last_error'])
         app.run()
         self.assertFalse(app.state['last_error'])
+
+    def test_download_preserves_pending_snapshot_and_warning_health(self):
+        self.app.initialize()
+        self.app.engine('backup', '--quiet', '--tag', f'{ib.MANAGED},pending', str(self.source))
+        pending = [s['id'] for s in self.app.snapshots('pending')]
+        self.app.state.update(last_error='earlier cycle failed', needs_full_check=True)
+        state = json.loads(json.dumps(self.app.state))
+        self.c.flag_path.write_text('keep this backup warning\n')
+        self.app.download()
+        self.assertEqual([s['id'] for s in self.app.snapshots('pending')], pending)
+        self.assertEqual(self.app.state, state)
+        self.assertEqual(self.c.flag_path.read_text(), 'keep this backup warning\n')
 
 
 if __name__=='__main__':unittest.main()
