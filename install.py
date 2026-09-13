@@ -46,6 +46,19 @@ def stable_python():
     raise RuntimeError('Python 3.11 or newer is required')
 
 
+def install_alias(alias, canonical):
+    """Atomically install a relative symlink without replacing an unrelated name."""
+    alias = Path(alias)
+    canonical = Path(canonical)
+    if os.path.lexists(alias):
+        if not alias.is_symlink() or alias.resolve() != canonical.resolve():
+            raise RuntimeError(f'refusing to replace unrelated command alias: {alias}')
+    temporary = alias.with_name(f'.{alias.name}.installing-{os.getpid()}')
+    temporary.unlink(missing_ok=True)
+    temporary.symlink_to(canonical.name)
+    os.replace(temporary, alias)
+
+
 def install(config_path, label, initialize):
     """Replace a deployment, preserve private rollback files, and load its jobs.
 
@@ -72,9 +85,11 @@ def install(config_path, label, initialize):
     migration.mkdir(parents=True, mode=0o700)
     # Keep private rollback material outside the source checkout.
     shutil.copy2(config_path, migration/'config.toml')
-    for path in [runner, watcher, home/'bin/icloud-backup', *plists]:
-        if path.is_file():
-            shutil.copy2(path, migration/path.name)
+    backup_command = home/'bin/icloud-backup'
+    backup_alias = home/'bin/icback'
+    for path in [runner, watcher, backup_command, backup_alias, *plists]:
+        if path.is_file() or path.is_symlink():
+            shutil.copy2(path, migration/path.name, follow_symlinks=False)
     domain = f'gui/{os.getuid()}'
     previous = {}
     for job in [label+'-watch', label]:
@@ -87,7 +102,8 @@ def install(config_path, label, initialize):
     with ib.run_lock(config.state_dir/'run.lock'):
         for filename, target in [('icloud_backup.py', runner), ('watch.py', watcher)]:
             ib.atomic_write(target, Path(__file__).with_name(filename).read_text(), 0o700)
-        ib.atomic_write(home/'bin/icloud-backup', launcher, 0o700)
+        ib.atomic_write(backup_command, launcher, 0o700)
+        install_alias(backup_alias, backup_command)
         for path, data in plists.items():
             ib.atomic_write(path, plistlib.dumps(data).decode())
             subprocess.run(['/usr/bin/plutil', '-lint', str(path)], check=True)
@@ -119,7 +135,7 @@ def install(config_path, label, initialize):
             break
         time.sleep(.2)
     subprocess.run(['/bin/launchctl', 'bootstrap', domain, str(watch_plist)], check=True, capture_output=True)
-    print(f'Installed runtime: {runner.parent}\nCommand: {home}/bin/icloud-backup\nPrevious files: {migration}')
+    print(f'Installed runtime: {runner.parent}\nCommands: {backup_command} and {backup_alias}\nPrevious files: {migration}')
     print('Daily backup and independent six-hour watchdog are loaded. Use icloud-backup status to check the first run.')
 
 

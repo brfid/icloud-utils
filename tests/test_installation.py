@@ -56,6 +56,40 @@ class Installation(Fixture):
         self.assertIsNone(ib.App(self.c).state['last_error'])
         self.assertTrue(ib.App(self.c).state['sources']['source']['snapshot'])
 
+    def test_backup_alias_install_refuses_unrelated_name(self):
+        commands = self.root/'commands'; commands.mkdir()
+        canonical = commands/'icloud-backup'; canonical.write_text('#!/bin/sh\nexit 0\n')
+        alias = commands/'icback'
+        install.install_alias(alias, canonical)
+        self.assertTrue(alias.is_symlink())
+        self.assertEqual(alias.resolve(), canonical.resolve())
+        alias.unlink(); alias.write_text('unrelated')
+        with self.assertRaisesRegex(RuntimeError, 'unrelated'):
+            install.install_alias(alias, canonical)
+
+    def test_materializer_wrapper_forwards_arguments_and_exit_status_without_config(self):
+        companion = self.root/'icloud-materialize'
+        companion.write_text(
+            '#!/bin/sh\n'
+            'if [ "$1" = --version ]; then echo "icloud-materialize 1.0.0 (JSON schema 1.0)"; exit 0; fi\n'
+            'test "$1" = fetch && test "$2" = --json && test "$3" = -- && test "$4" = /fixture\n'
+            'exit 7\n')
+        companion.chmod(0o700)
+        status = ib.dispatch_materializer(
+            ['--config', str(self.root/'deliberately-missing.toml'), 'materialize',
+             'fetch', '--json', '--', '/fixture'], companion=companion, replace=False)
+        self.assertEqual(status, 7)
+        self.assertIsNone(ib.dispatch_materializer(['status'], companion=companion, replace=False))
+
+    def test_materializer_wrapper_rejects_missing_and_incompatible_companions(self):
+        self.assertEqual(ib.dispatch_materializer(['materialize', 'check', '--', '/x'],
+                                                  companion=self.root/'missing', replace=False), 1)
+        companion = self.root/'old-materializer'
+        companion.write_text('#!/bin/sh\necho "icloud-materialize 0.9.0 (JSON schema 0.9)"\n')
+        companion.chmod(0o700)
+        self.assertEqual(ib.dispatch_materializer(['materialize', 'check', '--', '/x'],
+                                                  companion=companion, replace=False), 1)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -25,7 +25,7 @@ import tomllib
 import unicodedata
 import uuid
 
-VERSION = '2.1.0'
+VERSION = '2.2.0'
 MANAGED = 'icloud-backup-v2'
 DEFAULT_CONFIG = Path.home() / '.config/icloud_backup/config.toml'
 DEFAULT_SUPPORT = Path.home() / 'Library/Application Support/icloud-backup'
@@ -33,6 +33,7 @@ STALE_HOURS = 36
 RESTIC_LOCKED = 11
 LOCK_RETRY = '3m'
 SF_DATALESS = getattr(stat, 'SF_DATALESS', 0x40000000)
+MATERIALIZER_SCHEMA_MAJOR = 1
 
 
 def now():
@@ -90,6 +91,47 @@ def absolute(value):
     if not p.is_absolute():
         raise ValueError(f'path must be absolute or start with ~: {value}')
     return p.resolve()
+
+
+def dispatch_materializer(argv, companion=None, replace=True):
+    """Run the installed native companion before loading backup configuration.
+
+    The installed launcher prepends ``--config PATH``. Recognize only that global
+    option while locating the first command, then forward all remaining arguments
+    unchanged. A real invocation uses ``exec`` so signals and final exit status are
+    those of the materializer itself. Tests may request a normal child process.
+    """
+    argv = list(argv)
+    index = 0
+    while index < len(argv):
+        argument = argv[index]
+        if argument == '--config':
+            index += 2
+            continue
+        if argument.startswith('--config='):
+            index += 1
+            continue
+        if argument != 'materialize':
+            return None
+        forwarded = argv[index + 1:]
+        path = Path(companion) if companion is not None else Path.home() / 'bin/icloud-materialize'
+        if not path.is_file() or not os.access(path, os.X_OK):
+            print(f'iCloud materializer companion is missing or not executable: {path}', file=sys.stderr)
+            return 1
+        try:
+            probe = subprocess.run([str(path), '--version'], capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError) as exc:
+            print(f'Could not check iCloud materializer compatibility: {exc}', file=sys.stderr)
+            return 1
+        match = re.fullmatch(r'icloud-materialize (\d+)\.\d+\.\d+ \(JSON schema (\d+)\.\d+\)\s*', probe.stdout)
+        if probe.returncode or not match or int(match.group(1)) != 1 or int(match.group(2)) != MATERIALIZER_SCHEMA_MAJOR:
+            print(f'Incompatible iCloud materializer companion at {path}; version/schema major 1 is required', file=sys.stderr)
+            return 1
+        command = [str(path), *forwarded]
+        if replace:
+            os.execv(str(path), command)
+        return subprocess.run(command).returncode
+    return None
 
 
 def overlaps(a, b):
@@ -695,11 +737,17 @@ class App:
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    materializer_status = dispatch_materializer(argv)
+    if materializer_status is not None:
+        return materializer_status
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=Path(os.environ.get('ICLOUD_BACKUP_CONFIG', DEFAULT_CONFIG)))
     sub = parser.add_subparsers(dest='command', required=True)
     for name in ['init', 'connect', 'run', 'tick', 'watch', 'snapshots', 'download']:
         sub.add_parser(name)
+    materialize = sub.add_parser('materialize', help='invoke the independently installed icloud-materialize companion')
+    materialize.add_argument('arguments', nargs=argparse.REMAINDER)
     status = sub.add_parser('status'); status.add_argument('--json', action='store_true')
     verify = sub.add_parser('verify'); verify.add_argument('--full', action='store_true')
     restore = sub.add_parser('restore')

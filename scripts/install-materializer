@@ -1,0 +1,90 @@
+#!/bin/sh
+set -eu
+
+prefix="$HOME/bin"
+binary=""
+uninstall=false
+
+usage() {
+    printf '%s\n' 'Usage: scripts/install-materializer [--prefix DIR] [--binary FILE] [--uninstall]'
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --prefix)
+            [ "$#" -ge 2 ] || { usage >&2; exit 2; }
+            prefix=$2
+            shift 2
+            ;;
+        --binary)
+            [ "$#" -ge 2 ] || { usage >&2; exit 2; }
+            binary=$2
+            shift 2
+            ;;
+        --uninstall)
+            uninstall=true
+            shift
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            printf 'Unknown option: %s\n' "$1" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+canonical="$prefix/icloud-materialize"
+alias_path="$prefix/icmat"
+
+owned_binary() {
+    [ -x "$canonical" ] && "$canonical" --version 2>/dev/null | grep -Eq '^icloud-materialize [0-9]+\.'
+}
+
+owned_alias() {
+    [ -L "$alias_path" ] && [ "$(readlink "$alias_path")" = 'icloud-materialize' ]
+}
+
+if [ "$uninstall" = true ]; then
+    if [ -e "$alias_path" ] || [ -L "$alias_path" ]; then
+        owned_alias || { printf 'Refusing to remove unrelated alias: %s\n' "$alias_path" >&2; exit 1; }
+        rm "$alias_path"
+    fi
+    if [ -e "$canonical" ] || [ -L "$canonical" ]; then
+        owned_binary || { printf 'Refusing to remove unrelated command: %s\n' "$canonical" >&2; exit 1; }
+        rm "$canonical"
+    fi
+    printf 'Removed icloud-materialize and icmat from %s\n' "$prefix"
+    exit 0
+fi
+
+if [ -z "$binary" ]; then
+    printf '%s\n' 'Pass --binary with a tested release build. Use make release first.' >&2
+    exit 2
+fi
+[ -x "$binary" ] || { printf 'Materializer binary is not executable: %s\n' "$binary" >&2; exit 1; }
+"$binary" --version | grep -Eq '^icloud-materialize [0-9]+\.' || {
+    printf 'Binary does not identify as icloud-materialize: %s\n' "$binary" >&2
+    exit 1
+}
+if [ -e "$canonical" ] || [ -L "$canonical" ]; then
+    owned_binary || { printf 'Refusing to replace unrelated command: %s\n' "$canonical" >&2; exit 1; }
+fi
+if [ -e "$alias_path" ] || [ -L "$alias_path" ]; then
+    owned_alias || { printf 'Refusing to replace unrelated alias: %s\n' "$alias_path" >&2; exit 1; }
+fi
+
+mkdir -p "$prefix"
+temporary="$prefix/.icloud-materialize.installing-$$"
+alias_temporary="$prefix/.icmat.installing-$$"
+trap 'rm -f "$temporary" "$alias_temporary"' EXIT HUP INT TERM
+install -m 0755 "$binary" "$temporary"
+"$temporary" --version >/dev/null
+mv -f "$temporary" "$canonical"
+ln -s 'icloud-materialize' "$alias_temporary"
+mv -f "$alias_temporary" "$alias_path"
+trap - EXIT HUP INT TERM
+printf 'Installed %s and %s\n' "$canonical" "$alias_path"
