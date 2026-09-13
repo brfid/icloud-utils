@@ -29,6 +29,8 @@ MANAGED = 'icloud-backup-v2'
 DEFAULT_CONFIG = Path.home() / '.config/icloud_backup/config.toml'
 DEFAULT_SUPPORT = Path.home() / 'Library/Application Support/icloud-backup'
 STALE_HOURS = 36
+RESTIC_LOCKED = 11
+LOCK_RETRY = '3m'
 
 
 def now():
@@ -187,6 +189,15 @@ class Busy(RuntimeError):
     pass
 
 
+class ResticError(RuntimeError):
+    """A failed Restic command with its exit status preserved for policy decisions."""
+    def __init__(self, command, returncode, diagnostics):
+        self.command = command
+        self.returncode = returncode
+        self.diagnostics = diagnostics
+        super().__init__(f'Restic {command} failed (exit {returncode}):\n{diagnostics[-3000:]}')
+
+
 @contextmanager
 def run_lock(path):
     """Hold a nonblocking local operation lock; raise Busy on contention."""
@@ -299,13 +310,25 @@ class App:
             if shutil.disk_usage(path).free < self.c.reserve_mib * 1024**2:
                 raise RuntimeError(f'less than {self.c.reserve_mib} MiB immediately free; stopped to preserve space')
 
-    def engine(self, *args, extra_space=()):
+    def engine(self, *args, extra_space=(), no_lock=False, retry_lock=True):
         """Run Restic with explicit repository, empty password, and local guards.
 
         Capture private diagnostics, scrub inherited RESTIC_* settings, and stop
         the child process group on interruption, timeout, or low free space.
-        Callers serialize repository operations with run_lock.
+        Retry only Restic's explicit repository-locked exit once. Callers
+        serialize repository operations with run_lock.
         """
+        try:
+            return self._engine(*args, extra_space=extra_space, no_lock=no_lock)
+        except ResticError as exc:
+            if not retry_lock or exc.returncode != RESTIC_LOCKED:
+                raise
+            log(f'repository locked during {args[0]}; clearing stale locks and waiting up to {LOCK_RETRY}')
+            self._engine('unlock')  # Ordinary unlock preserves active locks.
+            return self._engine(*args, extra_space=extra_space, no_lock=no_lock, retry_lock=LOCK_RETRY)
+
+    def _engine(self, *args, extra_space=(), no_lock=False, retry_lock=None):
+        """Run one Restic process without applying lock-recovery policy."""
         self.c.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         logs = self.c.state_dir / 'commands'
         logs.mkdir(exist_ok=True, mode=0o700)
@@ -314,7 +337,12 @@ class App:
         env = {k: v for k, v in os.environ.items() if not k.startswith('RESTIC_')}
         env['TZ'] = 'UTC'
         cmd = [self.c.restic, '--repo', str(self.c.repository), '--insecure-no-password',
-               '--cache-dir', str(self.c.cache_dir), *map(str, args)]
+               '--cache-dir', str(self.c.cache_dir)]
+        if no_lock:
+            cmd.append('--no-lock')
+        if retry_lock:
+            cmd += ['--retry-lock', retry_lock]
+        cmd += map(str, args)
         self.space_check(extra_space)
         started = time.monotonic()
         with logfile.open('wb') as f, tempfile.TemporaryFile() as stdout, materialize_dataless_files():
@@ -338,7 +366,7 @@ class App:
             old.unlink(missing_ok=True)
         if p.returncode:
             diagnostics = logfile.read_text(errors='replace')
-            raise RuntimeError(f'Restic {args[0]} failed (exit {p.returncode}):\n{diagnostics[-3000:]}')
+            raise ResticError(args[0], p.returncode, diagnostics)
         return output
 
     def snapshots(self, *tags):
@@ -348,10 +376,15 @@ class App:
     def identity(self):
         if not (self.c.repository / 'config').is_file():
             raise RuntimeError('repository is missing; run never creates a replacement automatically')
-        data = json.loads(self.engine('cat', 'config'))
+        data = json.loads(self.engine('cat', 'config', no_lock=True, retry_lock=False))
         expected = self.state.get('repository_id')
         if not expected or data['id'] != expected:
             raise RuntimeError('repository identity is not registered or does not match; use init or connect explicitly')
+
+    def prepare_repository(self):
+        """Verify identity without a Restic lock, then remove only stale locks."""
+        self.identity()
+        self.engine('unlock', retry_lock=False)
 
     def initialize(self, connect=False):
         """Explicitly create or verify/register a store; never replace its identity.
@@ -402,8 +435,7 @@ class App:
             self.save()
             try:
                 self.c.validate_paths()
-                self.identity()
-                self.engine('unlock')  # Only Restic's stale locks; never --remove-all.
+                self.prepare_repository()
                 successful = set()
                 failures = []
                 for source in self.c.sources:
@@ -564,7 +596,7 @@ class App:
         if target.exists() and (not target.is_dir() or any(target.iterdir())):
             raise ValueError('restore target must be a new or empty directory')
         with run_lock(self.c.state_dir / 'run.lock'):
-            self.identity()
+            self.prepare_repository()
             choices = self.snapshots('complete', f'source:{source_name}')
             matches = choices if snapshot == 'latest' else [s for s in choices if s['id'].startswith(snapshot)]
             if not matches or (snapshot != 'latest' and len(matches) != 1):
@@ -605,7 +637,7 @@ def main(argv=None):
             app.restore(args.source, args.snapshot, args.target)
         else:
             with run_lock(app.c.state_dir / 'run.lock'):
-                app.identity()
+                app.prepare_repository()
                 if args.command == 'snapshots':
                     items = app.snapshots('complete')
                     for item in sorted(items, key=lambda s: s['time'], reverse=True):

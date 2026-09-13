@@ -86,6 +86,8 @@ macOS attributes the scheduled job's permissions to its Python interpreter. In S
 
 An `Expecting value` JSON error after successful Restic retries can indicate an older runner mixing diagnostic stderr with JSON stdout. Version 2.0.1 separates those streams. Update from the corrected source using the existing configuration and labels, then retry; do not initialize a new store or remove its keys.
 
+Repository operations verify the registered store without taking a Restic lock, remove only locks Restic itself considers stale, and wait up to three minutes if an active external Restic process still owns a lock. A lock failure after that wait is safe: let the other operation finish and retry later. Do not use `restic unlock --remove-all` or delete files in the repository's `locks` directory.
+
 ## Connect, migration, and stopping
 
 For an existing backup store on a replacement Mac, first use the recovery guide if files are needed immediately. To resume this app, configure the new paths and run `python3 icloud_backup.py --config /absolute/path/to/config.toml connect` from the checkout, then install without `--initialize`. `connect` reads and checks all data before registering the store locally; it does not infer source configuration from snapshots or reconstruct old status. The next backup establishes current per-source status. Keep one Mac as the writer.

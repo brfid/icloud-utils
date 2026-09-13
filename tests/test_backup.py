@@ -51,8 +51,49 @@ class EngineIO(Fixture):
         self.assertIn('transient cloud read; retrying', diagnostic)
         self.assertIn('fixture', diagnostic)
         engine.write_text('#!/bin/sh\necho "access denied" >&2\nexit 3\n')
-        with self.assertRaisesRegex(RuntimeError, 'access denied'):
+        with self.assertRaisesRegex(ib.ResticError, 'access denied') as caught:
             self.app.engine('cat', 'config')
+        self.assertEqual(caught.exception.returncode, 3)
+
+    def test_stale_shared_lock_is_unlocked_and_retried_once(self):
+        locked = ib.ResticError('check', ib.RESTIC_LOCKED, 'stale shared lock')
+        with mock.patch.object(self.app, '_engine', side_effect=[locked, '', 'checked']) as engine:
+            self.assertEqual(self.app.engine('check'), 'checked')
+        self.assertEqual(engine.call_args_list, [
+            mock.call('check', extra_space=(), no_lock=False),
+            mock.call('unlock'),
+            mock.call('check', extra_space=(), no_lock=False, retry_lock=ib.LOCK_RETRY),
+        ])
+        self.assertNotIn('--remove-all', repr(engine.call_args_list))
+
+    def test_stale_exclusive_lock_cannot_block_identity_verification(self):
+        self.c.repository.mkdir(parents=True)
+        (self.c.repository/'config').write_text('stored config')
+        self.app.state['repository_id'] = 'expected'
+        with mock.patch.object(self.app, 'engine', side_effect=['{"id":"expected"}', '']) as engine:
+            self.app.prepare_repository()
+        self.assertEqual(engine.call_args_list, [
+            mock.call('cat', 'config', no_lock=True, retry_lock=False),
+            mock.call('unlock', retry_lock=False),
+        ])
+
+    def test_active_lock_is_not_removed_and_fails_after_bounded_retry(self):
+        first = ib.ResticError('check', ib.RESTIC_LOCKED, 'active lock')
+        second = ib.ResticError('check', ib.RESTIC_LOCKED, 'active lock remains')
+        with mock.patch.object(self.app, '_engine', side_effect=[first, '', second]) as engine:
+            with self.assertRaises(ib.ResticError) as caught:
+                self.app.engine('check')
+        self.assertEqual(caught.exception.returncode, ib.RESTIC_LOCKED)
+        self.assertEqual(engine.call_args_list[-1],
+                         mock.call('check', extra_space=(), no_lock=False, retry_lock=ib.LOCK_RETRY))
+        self.assertNotIn('--remove-all', repr(engine.call_args_list))
+
+    def test_non_lock_failure_is_not_retried(self):
+        failed = ib.ResticError('backup', 3, 'source read failed')
+        with mock.patch.object(self.app, '_engine', side_effect=failed) as engine:
+            with self.assertRaises(ib.ResticError):
+                self.app.engine('backup', str(self.source))
+        engine.assert_called_once_with('backup', str(self.source), extra_space=(), no_lock=False)
 
     @unittest.skipUnless(sys.platform == 'darwin', 'macOS I/O policy')
     def test_download_policy_is_inherited_and_restored_after_failure(self):
