@@ -1,0 +1,86 @@
+# Materializer
+
+This document owns the public contract, implementation limits, build, validation, and release procedure for `icloud-materialize` (`icmat`). Backup deployment procedures belong to [operations](operations.md); component boundaries belong to [architecture](architecture.md).
+
+## Commands and guarantees
+
+```text
+icloud-materialize check [OPTIONS] -- PATH...
+icloud-materialize fetch [OPTIONS] -- PATH...
+```
+
+Both commands require at least one explicit path and a `--` separator. Explicit root symlinks and Finder aliases are resolved. Overlapping roots are deduplicated. A root that is the iCloud Drive root or an ancestor is rejected unless the operator supplies `--allow-icloud-root`; descendant symlinks are never followed. Hidden files, packages, nested directories, and empty files are included. Mount boundaries are not crossed and make the inventory incomplete. Symlinks and unsupported special files are counted; payload reads never open FIFOs, devices, sockets, or other special files. A `.filename.icloud` name is reported only as a suspected unsupported legacy placeholder, never treated as proof or modified.
+
+`check` sets the process materialization policy to OFF. All supplied-path resolution, metadata queries, enumeration, and volume queries occur in supervised worker processes. A refusal or timeout reports the exact incomplete root or subtree. Check does not request downloads or read payloads. Success means consecutive metadata inventories stabilized and traversal completed; data-less files can therefore be reported in a successful check.
+
+`fetch` sets the worker policy to ON, enumerates one directory at a time, and requests downloads with Foundation's `startDownloadingUbiquitousItem` only for data-less or reported stale/unavailable candidates. It coordinates each native read with `NSFileCoordinator` and `.withoutChanges`, validates the URL supplied to the accessor, and performs the complete fixed-buffer read inside that accessor. Every included regular-file path is read, including already-local files and hard links. With `--sha256`, every digest is computed during that same read.
+
+File descriptors use no-follow opens. Directory traversal and file opens walk relative components from an already opened root descriptor. Identity, type, size, change times, and the exact EOF length are revalidated; a changing file receives one bounded retry. The complete visible inventory is repeated up to three times. Any failed request, read, timeout, unsupported special file, suspected legacy placeholder, unhandled change, unstable inventory, or remaining `SF_DATALESS` flag prevents fetch success.
+
+Neither command deliberately edits, uploads, renames, moves, evicts, or deletes user files. Hydration or refresh can change cached bytes and metadata, and macOS can evict a file later. A timeout can leave an iCloud daemon download continuing. Results are point-in-time observations of the device-visible tree, not an atomic snapshot, a server inventory, or proof of synchronization.
+
+## Options and statuses
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--json` | off | Emit one final schema object on stdout, including handled failures |
+| `--timeout SECONDS` | `300` | Maximum for each freshly executed root-resolution or root-operation worker |
+| `--deadline SECONDS` | `1800` | Maximum for the whole command |
+| `--reserve-mib MIB` | `1024` | Immediately free capacity retained on each processed volume |
+| `--sha256` | off | Hash all regular files during fetch; rejected by check |
+| `--verbose` | off | Worker progress on stderr |
+| `--allow-icloud-root` | off | Permit the otherwise guarded broad iCloud/ancestor scope |
+
+Exit 0 means the documented command guarantee completed. Exit 1 means traversal or operation was incomplete. Exit 2 is usage failure. Handled SIGINT and SIGTERM return 130 and 143. A crash or SIGKILL cannot promise final JSON.
+
+Space checks use immediately free filesystem capacity, not estimates that include purgeable storage. Known data-less/stale logical sizes plus the reserve are checked before work and again before requests. These estimates do not reserve capacity: newly revealed children, stale replacements, filesystem overhead, other writers, and later eviction remain possible.
+
+## JSON schema 1.0
+
+The final object includes:
+
+- `toolVersion`, `schemaVersion`, `command`, `success`, `enumerationComplete`, and `verificationScope`;
+- resolved `roots`, retaining every supplied spelling and the root volume/device;
+- `counts` for requested/resolved roots, directories, regular/unique files, data-less files, skipped symlinks, unsupported special files, suspected legacy placeholders, inventory passes, explicit requests and request failures, verified files, post-request observations, requested/read bytes, and hashes;
+- separate `freshness` counts for `current`, `stale`, `unavailable`, `unknown`, and `notApplicable`;
+- per-path `datalessFiles`, per-path `hashes` when requested, and structured `failures` with stage, domain, code, and explanation;
+- `timedOut`, `interruptedBySignal`, `hydrationAttribution`, and interpretive `observations`.
+
+`downloadRequests` records calls made by this program. `filesMaterializedAfterRequest` records a data-less-before/local-after observation. It does not claim that this process alone caused hydration because iCloud and other processes can work concurrently. Missing download-status keys count as unknown, never current. Fetch success is based on local readability; stale or unknown freshness remains visible and is not described as synchronized success.
+
+## Build, test, and install
+
+Source builds require Apple Swift, Foundation, Darwin, CryptoKit, and a compatible macOS SDK from Command Line Tools. No third-party packages, full Xcode, simulator, Python, or Restic are required for the materializer. The package declares macOS 13 as its deployment target. That is a compilation target, not a claim of runtime testing on macOS 13.
+
+The currently reproducible local commands pin the installed macOS 26.5 SDK because this machine's default SDK 27 and compiler have mismatched patch builds:
+
+```sh
+make build
+make test
+make release
+make checksum
+```
+
+Build products and module caches stay under the configurable `SWIFT_SCRATCH` and `/tmp` paths rather than Git. Override `SWIFT_SDK` and `SWIFT_SCRATCH` when using another compatible installed toolchain. `make test` uses disposable local files and Restic repositories; debug-only environment injection exercises blocking calls and failure paths but is absent from release builds.
+
+Install only a tested release build:
+
+```sh
+scripts/install-materializer --binary /tmp/icloud-utils-swift-build/release/icloud-materialize
+```
+
+This atomically installs `~/bin/icloud-materialize` and the relative symlink `~/bin/icmat`. It refuses to replace unrelated commands. Installed programs do not depend on the checkout. Installation and uninstallation require neither Python nor Restic and do not reload backup jobs:
+
+```sh
+scripts/install-materializer --uninstall
+```
+
+For rollback, retain a previously tested binary and rerun the installer with its absolute path. The installer intentionally has no release-download or auto-update behavior.
+
+## Validation and distribution limits
+
+The local test matrix must record facts, not inferred compatibility. As of the initial implementation, compilation and execution were tested only on Apple silicon (`arm64`) macOS 26.6.2 with Apple Swift 6.4 and the installed macOS 26.5 SDK. macOS 13–15 runtime behavior, macOS 27 runtime behavior, and Intel hardware are untested. Native iCloud eviction/materialization evidence is recorded only when a disposable fixture actually reached `SF_DATALESS`; a fixture that never evicted is inconclusive.
+
+Initial local acceptance included a uniquely named nested iCloud fixture whose intended files reported uploaded/current, were evicted only through Foundation's public API, and were then observed with native data-less flags. The final release build requested those files, cleared their flags, completed stable full reads, matched hashes recorded before eviction, and made zero explicit requests on a second full-read run. A metadata-selected pre-existing data-less archive file also completed a one-file fetch without being evicted or modified by the test. Detailed fixture names, hashes, and machine logs remain private and outside Git.
+
+For a local distributable binary, run `make release`, run the complete tests against that exact build, inspect it with `file` and `otool -L`, and record `make checksum` output outside Git. The build is currently ad hoc and not notarized. Public binary distribution should add an identified Developer ID signature, notarization, stapling where applicable, and runtime testing on each claimed OS/architecture before publishing a release. No release is published by these procedures.

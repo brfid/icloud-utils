@@ -25,6 +25,11 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Swift
+.build/
+.swiftpm/
+Package.resolved
+
 # macOS
 .DS_Store
 

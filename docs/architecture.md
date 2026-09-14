@@ -6,12 +6,18 @@ The [storage decision](adr-001-storage.md) records why this design was chosen. T
 
 | Component | Owns | Delegates |
 | --- | --- | --- |
+| `icloud-materialize`: parent | CLI/schema contract, deadlines, signals, worker termination/reaping, and final aggregation | Supplied-path operations to fresh worker processes |
+| `icloud-materialize`: workers | Root resolution, guarded/deduplicated scope, metadata inventory, space estimates, download requests, coordinated reads, hashing, and stability checks | Native hydration and coordination to macOS/iCloud |
 | `icloud_backup.py`: `Config` / `load_config` | Validated private configuration and path boundaries | Installation layout to the installer |
 | `icloud_backup.py`: `App` | Backup lifecycle, completion state, local locks, engine guards, source health, and safe restore targets | Storage, snapshot selection, verification, and calendar retention to Restic |
 | `install.py` | Stable runtime/shortcut, generated launchd jobs, deployment metadata, migration copies, and recovery export | Backup execution to the installed runner |
 | `watch.py` | Independent supervision of `status --json` and fallback alerts | Health rules to the runner while it can run |
 | Restic | Content reuse, compression, internal repository format, snapshots, integrity checks, restore, and retention | Remote file synchronization to iCloud Drive |
 | iCloud Drive | Asynchronous upload and native download-on-read | Local backup success is reported by the runner |
+
+The materializer and backup runner are separate installed programs. `icloud-backup materialize ...` performs an early compatibility check and replaces itself with the known `~/bin/icloud-materialize` companion before loading backup configuration or constructing `App`. A missing companion affects only that explicit subcommand. The JSON schema is owned by [the materializer contract](materializer.md#json-schema-10).
+
+The materializer has no global database or daemon. Its parent does not touch supplied paths; a resolution worker and one worker per deduplicated root perform potentially blocking filesystem operations. Parent deadlines and interrupts bound waiting, followed by bounded TERM/KILL reaping. Worker process exit ends its process-local I/O policy even when cleanup cannot run. A timeout cannot revoke a download already handed to an iCloud daemon.
 
 The watchdog's small file-writing and notification fallback is intentionally independent. Sharing it by importing the runner would prevent it from reporting a broken runner import. Tests exercise that failure boundary. The installer may import the source runner because it is a deployment tool, not the independent monitor.
 
@@ -47,6 +53,8 @@ Files evicted by iCloud can be downloaded when Restic reads them. Before spawnin
 
 The explicit repository download operation inventories native cloud-only regular files from `stat.SF_DATALESS`, excluding transient Restic lock files. Before reading data it requires enough immediately free space for their logical sizes plus the configured reserve. `restic check --read-data` then materializes repository contents under the same child-process policy and authenticates all stored data. Every initial candidate must afterward be present, readable, and no longer data-less. This is a point-in-time local guarantee because macOS may evict files again. It neither establishes iCloud upload completion nor changes backup-cycle completion, pending snapshots, or alerts.
 
+That `download` operation remains specific to the configured Restic repository. Its later one-byte readability probe is a postcondition after Restic has authenticated all stored data; it is not the generic materializer's algorithm. `icloud-materialize fetch` instead coordinates and reads every included regular file to EOF. The backup runner keeps its small I/O-policy context manager because a standalone materializer cannot change the policy inherited by a later sibling Restic process.
+
 Directory listing, metadata inspection, and timestamp changes do not request file contents, so no `touch` sweep is used. Finder's Download Now remains an operator fallback. Legacy placeholder handling is documented in [configuration](configuration.md#backup-store-and-sources). Restic stdout is kept separate from stderr for parsing: a successful retry can emit diagnostic warnings before valid JSON. Private command logs preserve both streams, and nonzero exit codes remain failures.
 
 This design assumes iCloud will sync. It does not turn a general sync folder into a transactional remote backup store or verify remote upload completion. One Mac writes; other Macs recover after syncing. iCloud can evict data at its discretion, and the app promises no eviction deadline. Full checks, restores, and some maintenance can download substantial data.
@@ -60,3 +68,5 @@ File capture is not an atomic filesystem image or application-consistent export.
 The test suite uses temporary data and real empty-password Restic repositories for version/deletion recovery, hidden files, symlinks, exclusions, managed retention, and independent source groups. Calendar tests cover the configured default policy across year and leap-day boundaries. Failure tests combine real repositories with injected read/check/space failures and an interrupted child process, checking that old completed points survive and later runs can recover. Installation tests cover schedule wiring, configuration selection, the watchdog's missing-runner path, and a copied runtime after a fixture checkout is removed.
 
 Manual iCloud tests exercised native eviction, incremental capture, old/deleted-file recovery, full checking, and prune. They also covered native cloud-only source reads. Manual production validation included a scheduled capture and separate verified restores. These observations do not establish physical power-loss behavior, a remote transactional guarantee, or universal compatibility across macOS releases. Private run evidence and machine inventories are intentionally outside this repository.
+
+Materializer validation is owned by [the materializer document](materializer.md#validation-and-distribution-limits). Its local fixtures and debug-only injected failures do not prove real iCloud hydration, a background launch environment, another macOS version, or another CPU architecture. Real acceptance requires a fixture with observed native eviction and independently recorded hashes.

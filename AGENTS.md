@@ -1,6 +1,6 @@
-# Working on iCloud Backup
+# Working on iCloud Utils
 
-Read [README.md](README.md), then the relevant document in its ownership table. Keep each procedure or explanation in its owner and link to it elsewhere. Python docstrings describe responsibilities, invariants, and side effects; they do not repeat the operating manual. Use soft-wrapped Markdown.
+Read [README.md](README.md), then the relevant document in its ownership table. Keep each procedure or explanation in its owner and link to it elsewhere. Python and Swift documentation comments describe responsibilities, invariants, and side effects; they do not repeat the operating manual. Use soft-wrapped Markdown.
 
 ## Git checkpoints and project records
 
@@ -14,7 +14,7 @@ This checkout is the portable source of truth for code and documentation. It is 
 
 Edit code here, then use the documented installer when deployment is part of the task. Preserve the discovered configuration and label arguments. Do not edit generated runtime copies or plists directly, replace a live config with the example, or run new-install initialization as an update. A docs-only edit does not itself require restarting scheduled jobs.
 
-Keep machine inventories, private configuration, status output, logs, recovery copies, restored data, and publication-review notes outside Git. Do not copy them into these instructions. `.gitignore` reduces accidental additions; it does not sanitize tracked files or history. Changing repository visibility or rewriting existing history requires an explicit user request.
+Keep machine inventories, private configuration, status output, logs, recovery copies, materializer result files, restored data, and publication-review notes outside Git. Do not copy them into these instructions. `.gitignore` reduces accidental additions; it does not sanitize tracked files or history. Changing repository visibility or rewriting existing history requires an explicit user request.
 
 ## Maintain the boundaries
 

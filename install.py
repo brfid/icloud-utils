@@ -46,17 +46,27 @@ def stable_python():
     raise RuntimeError('Python 3.11 or newer is required')
 
 
-def install_alias(alias, canonical):
-    """Atomically install a relative symlink without replacing an unrelated name."""
+def validate_alias(alias, canonical):
+    """Reject an occupied alias unless it already names this canonical command."""
     alias = Path(alias)
     canonical = Path(canonical)
     if os.path.lexists(alias):
         if not alias.is_symlink() or alias.resolve() != canonical.resolve():
             raise RuntimeError(f'refusing to replace unrelated command alias: {alias}')
+
+
+def install_alias(alias, canonical):
+    """Atomically install a relative symlink without replacing an unrelated name."""
+    alias = Path(alias)
+    canonical = Path(canonical)
+    validate_alias(alias, canonical)
     temporary = alias.with_name(f'.{alias.name}.installing-{os.getpid()}')
     temporary.unlink(missing_ok=True)
-    temporary.symlink_to(canonical.name)
-    os.replace(temporary, alias)
+    try:
+        temporary.symlink_to(canonical.name)
+        os.replace(temporary, alias)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def install(config_path, label, initialize):
@@ -87,6 +97,8 @@ def install(config_path, label, initialize):
     shutil.copy2(config_path, migration/'config.toml')
     backup_command = home/'bin/icloud-backup'
     backup_alias = home/'bin/icback'
+    # Refuse alias collisions before unloading healthy jobs.
+    validate_alias(backup_alias, backup_command)
     for path in [runner, watcher, backup_command, backup_alias, *plists]:
         if path.is_file() or path.is_symlink():
             shutil.copy2(path, migration/path.name, follow_symlinks=False)

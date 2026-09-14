@@ -156,6 +156,18 @@ public struct HashRecord: Codable, Hashable, Sendable {
     }
 }
 
+public struct DatalessRecord: Codable, Hashable, Sendable {
+    public var path: String
+    public var logicalBytes: Int64
+    public var freshness: String
+
+    public init(path: String, logicalBytes: Int64, freshness: String) {
+        self.path = path
+        self.logicalBytes = logicalBytes
+        self.freshness = freshness
+    }
+}
+
 public struct ResultDocument: Codable, Sendable {
     public var toolVersion = ICloudMaterializeCore.toolVersion
     public var schemaVersion = ICloudMaterializeCore.schemaVersion
@@ -166,6 +178,7 @@ public struct ResultDocument: Codable, Sendable {
     public var roots: [RootRecord]
     public var counts: ResultCounts
     public var freshness: FreshnessCounts
+    public var datalessFiles: [DatalessRecord]
     public var hashes: [HashRecord]
     public var failures: [FailureRecord]
     public var timedOut: Bool
@@ -183,6 +196,7 @@ public struct ResultDocument: Codable, Sendable {
         self.roots = []
         self.counts = ResultCounts()
         self.freshness = FreshnessCounts()
+        self.datalessFiles = []
         self.hashes = []
         self.failures = []
         self.timedOut = false
@@ -197,6 +211,7 @@ public struct ResultDocument: Codable, Sendable {
         roots.append(contentsOf: other.roots)
         counts.add(other.counts)
         freshness.add(other.freshness)
+        datalessFiles.append(contentsOf: other.datalessFiles)
         hashes.append(contentsOf: other.hashes)
         failures.append(contentsOf: other.failures)
         timedOut = timedOut || other.timedOut

@@ -357,6 +357,13 @@ private func inventory(_ root: RootRecord) -> Inventory {
             ? root.resolved
             : (root.resolved as NSString).appendingPathComponent(relative.joined(separator: "/"))
         do {
+            #if DEBUG
+            if let suffix = ProcessInfo.processInfo.environment["ICMAT_TEST_ENUMERATION_FAILURE_SUFFIX"],
+               directoryPath.hasSuffix(suffix) {
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES),
+                              userInfo: [NSLocalizedDescriptionKey: "injected subtree metadata refusal"])
+            }
+            #endif
             let descriptor = try openDirectory(rootFD: rootFD, relative: relative)
             guard let directory = fdopendir(descriptor) else {
                 Darwin.close(descriptor)
@@ -492,6 +499,11 @@ private func streamRead(
     requested: Bool,
     hashing: Bool
 ) throws -> Verification {
+    #if DEBUG
+    if ProcessInfo.processInfo.environment["ICMAT_TEST_FILE_CHANGE_FAILURE"] == "1" {
+        throw FileChanged(description: "injected file replacement during both bounded attempts")
+    }
+    #endif
     let supplied = coordinatedURL.standardizedFileURL.path
     guard supplied == URL(fileURLWithPath: node.path).standardizedFileURL.path else {
         throw NSError(domain: NSCocoaErrorDomain, code: NSFileReadInvalidFileNameError,
@@ -621,6 +633,9 @@ private func summarize(_ inventory: Inventory, into result: inout ResultDocument
         }
     }
     result.freshness = freshnessCounts
+    result.datalessFiles = inventory.regularFiles.filter { $0.stat.dataless }.map {
+        DatalessRecord(path: $0.path, logicalBytes: $0.stat.size, freshness: $0.freshness.rawValue)
+    }.sorted { $0.path < $1.path }
 }
 
 private func operateCheck(root: RootRecord, options: Options) -> ResultDocument {
@@ -635,7 +650,13 @@ private func operateCheck(root: RootRecord, options: Options) -> ResultDocument 
         result.counts.inventoryPasses += 1
         final = current
         if !current.complete { break }
-        if let previous, previous.stableKey == current.stableKey {
+        let forcedUnstable: Bool
+        #if DEBUG
+        forcedUnstable = ProcessInfo.processInfo.environment["ICMAT_TEST_FORCE_UNSTABLE"] == "1"
+        #else
+        forcedUnstable = false
+        #endif
+        if let previous, !forcedUnstable, previous.stableKey == current.stableKey {
             result.enumerationComplete = true
             break
         }
@@ -751,7 +772,13 @@ private func operateFetch(root: RootRecord, options: Options) -> ResultDocument 
             operationalFailures.append(contentsOf: after.failures)
             break
         }
-        if before.stableKey == after.stableKey,
+        let forcedUnstable: Bool
+        #if DEBUG
+        forcedUnstable = ProcessInfo.processInfo.environment["ICMAT_TEST_FORCE_UNSTABLE"] == "1"
+        #else
+        forcedUnstable = false
+        #endif
+        if !forcedUnstable, before.stableKey == after.stableKey,
            after.regularFiles.allSatisfy({ node in
                verifications[node.path]?.stat.sameContentMetadata(as: node.stat) == true
            }) {

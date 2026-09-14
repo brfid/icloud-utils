@@ -2,6 +2,8 @@
 
 The active configuration is a private TOML file selected by the installer. The default is `~/.config/icloud_backup/config.toml`; an existing installation's actual selection is discoverable through [operations](operations.md#identify-the-active-installation). [example.config.toml](../example.config.toml) is a template, never a live source inventory. The installer does not create or overwrite the active configuration.
 
+This file configures `icloud-backup` only. `icloud-materialize` has no persistent configuration and requires explicit paths and options on every invocation; see [its contract](materializer.md).
+
 `load_config()` and `Config` in [icloud_backup.py](../icloud_backup.py) define the accepted schema and defaults. Unknown settings, wrong types, unsafe path overlaps, and invalid source names are rejected. Paths must be absolute or start with `~`; they are resolved before overlap checks. Relative paths are not interpreted against the checkout.
 
 ## Backup store and sources

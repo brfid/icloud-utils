@@ -71,6 +71,7 @@ class MaterializerCLI(unittest.TestCase):
                                     env={'ICMAT_TEST_DATALESS_SUFFIX': 'local.txt'})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(data['counts']['datalessFiles'], 1)
+        self.assertEqual(data['datalessFiles'][0]['path'], str(self.root/'local.txt'))
         self.assertEqual(data['counts']['downloadRequests'], 0)
         self.assertEqual(data['counts']['readBytes'], 0)
 
@@ -138,6 +139,50 @@ class MaterializerCLI(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(data['counts']['specialFilesUnsupported'], 1)
         self.assertTrue(any(item['stage'] == 'unsupported-special-file' for item in data['failures']))
+
+    def test_hard_links_are_accounted_and_each_path_is_verified(self):
+        os.link(self.root/'local.txt', self.root/'hard-link.txt')
+        result, data = self.run_cli('fetch', '--json', '--reserve-mib', '0', '--sha256', '--', str(self.root))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(data['counts']['regularFiles'], 5)
+        self.assertEqual(data['counts']['uniqueFileObjects'], 4)
+        self.assertEqual(data['counts']['filesVerified'], 5)
+        hashes = {item['path']: item['sha256'] for item in data['hashes']}
+        self.assertEqual(hashes[str(self.root/'local.txt')], hashes[str(self.root/'hard-link.txt')])
+
+    def test_metadata_refusal_and_unstable_inventory_fail_explicitly(self):
+        denied, denied_data = self.run_cli(
+            'check', '--json', '--', str(self.root),
+            env={'ICMAT_TEST_ENUMERATION_FAILURE_SUFFIX': 'nested'})
+        self.assertEqual(denied.returncode, 1)
+        self.assertFalse(denied_data['enumerationComplete'])
+        self.assertTrue(any(item['stage'] == 'enumerate-directory' and item['path'].endswith('/nested')
+                            for item in denied_data['failures']))
+        unstable, unstable_data = self.run_cli(
+            'check', '--json', '--', str(self.root), env={'ICMAT_TEST_FORCE_UNSTABLE': '1'})
+        self.assertEqual(unstable.returncode, 1)
+        self.assertTrue(any(item['stage'] == 'inventory-stability' for item in unstable_data['failures']))
+
+    def test_file_change_exhausting_retry_prevents_verification(self):
+        result, data = self.run_cli(
+            'fetch', '--json', '--reserve-mib', '0', '--', str(self.root),
+            env={'ICMAT_TEST_FILE_CHANGE_FAILURE': '1'})
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(data['counts']['filesVerified'], 0)
+        self.assertTrue(any(item['stage'] == 'coordinated-read' and 'replacement' in item['explanation']
+                            for item in data['failures']))
+
+    def test_legacy_placeholder_is_reported_without_being_modified(self):
+        placeholder = self.root/'.old.pdf.icloud'
+        placeholder.write_bytes(b'legacy-marker')
+        before = placeholder.read_bytes()
+        checked, check_data = self.run_cli('check', '--json', '--', str(self.root))
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        self.assertEqual(check_data['counts']['legacyPlaceholders'], 1)
+        fetched, fetch_data = self.run_cli('fetch', '--json', '--reserve-mib', '0', '--', str(self.root))
+        self.assertEqual(fetched.returncode, 1)
+        self.assertTrue(any(item['stage'] == 'legacy-placeholder' for item in fetch_data['failures']))
+        self.assertEqual(placeholder.read_bytes(), before)
 
     def test_missing_freshness_is_not_reported_current(self):
         result, data = self.run_cli('check', '--json', '--', str(self.root),

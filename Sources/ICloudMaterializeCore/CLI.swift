@@ -396,6 +396,7 @@ private func runPublic(_ options: Options, executable: String, signalState: Sign
 
     result.counts.rootsRequested = options.paths.count
     result.counts.rootsResolved = resolution.roots.count
+    result.datalessFiles.sort { $0.path < $1.path }
     result.hashes.sort { $0.path < $1.path }
     if options.command == .check {
         result.success = result.enumerationComplete && result.failures.isEmpty &&
