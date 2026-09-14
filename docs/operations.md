@@ -2,6 +2,16 @@
 
 Use this document for installation discovery, updates, normal commands, and alerts for both toolkit commands. The backup configuration schema belongs to [configuration](configuration.md); materializer behavior belongs to [materializer](materializer.md); component mechanics belong to [architecture](architecture.md). Machine-specific status belongs in the private installation, not in repository documentation.
 
+| Task | Go to |
+| --- | --- |
+| Find the active files, configuration, and job labels | [Identify the active installation](#identify-the-active-installation) |
+| Update an installed backup without creating another store or job pair | [Update an existing backup installation](#update-an-existing-backup-installation) |
+| Install, update, roll back, or remove the materializer | [Install or remove the materializer](#install-or-remove-the-materializer) |
+| Run a backup, verification, download, or restore | [Commands and restoration](#commands-and-restoration) |
+| Understand scheduled runs and alerts | [Schedule and alerts](#schedule-and-alerts) |
+| Diagnose cloud-only reads, permission prompts, JSON errors, or locks | [Troubleshooting](troubleshooting.md) |
+| Reconnect a store, migrate from the old archive, or stop the jobs | [Connect, migration, and stopping](#connect-migration-and-stopping) |
+
 ## Identify the active installation
 
 ```sh
@@ -51,7 +61,7 @@ To compare deployed code with a checkout after an update, compare the two Python
 
 ## Install or remove the materializer
 
-Build and test independently as described in [Materializer](materializer.md#build-test-and-install). Then install the exact tested release binary:
+Build and test independently as described in [Materializer](materializer.md#build-and-test). Then install the exact tested release binary:
 
 ```sh
 scripts/install-materializer --binary /tmp/icloud-utils-swift-build/release/icloud-materialize
@@ -106,15 +116,7 @@ The watchdog can report a missing or broken runner because it does not import it
 
 Logs are `~/Library/Logs/icloud-backup.log` and `~/Library/Logs/icloud-backup-watch.log`; the most recent 40 individual engine logs are under the configured state directory. Private logs/status may contain source paths and filenames. Keep them outside Git and redact them before sharing an issue. iCloud upload progress and quotas are intentionally outside these checks; handle sync problems through iCloud.
 
-### Cloud-only reads and permission prompts
-
-For `resource deadlock avoided` errors, first check that the installed runner includes the explicit download-on-read policy described in [architecture](architecture.md#icloud-and-space), then inspect iCloud availability and the exact failing path. Finder's Download Now on the backup store can recover an immediate run. Validate fixes through the actual scheduled job using `launchctl kickstart gui/$(id -u)/BASE_LABEL` and wait for fresh success for every source; a successful command launched from a terminal does not establish the scheduler's access.
-
-macOS attributes the scheduled job's permissions to its Python interpreter. In System Settings > Privacy & Security > Files & Folders, check its iCloud Drive access and Desktop access for the warning file. A Python upgrade can create a new interpreter identity and require renewed approval. A Desktop prompt after a failure can be from writing the alert, rather than the cause of the backup failure; compare log times before diagnosing it. Do not grant Full Disk Access merely to fix download policy. The runner still requires ordinary macOS authorization for protected files.
-
-An `Expecting value` JSON error after successful Restic retries can indicate an older runner mixing diagnostic stderr with JSON stdout. Version 2.0.1 separates those streams. Update from the corrected source using the existing configuration and labels, then retry; do not initialize a new store or remove its keys.
-
-Repository operations verify the registered store without taking a Restic lock, remove only locks Restic itself considers stale, and wait up to three minutes if an active external Restic process still owns a lock. A lock failure after that wait is safe: let the other operation finish and retry later. Do not use `restic unlock --remove-all` or delete files in the repository's `locks` directory.
+For failures, begin with [Troubleshooting](troubleshooting.md). It separates cloud-only read policy, scheduler permissions, output parsing, and repository locks so that one symptom does not lead to an unrelated repair.
 
 ## Connect, migration, and stopping
 

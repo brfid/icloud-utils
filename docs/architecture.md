@@ -1,13 +1,27 @@
 # Architecture
 
-The [storage decision](adr-001-storage.md) records why this design was chosen. This document owns the current component responsibilities, integrity guarantees, and validation scope. Operator procedures belong to [operations](operations.md).
+The toolkit keeps backup storage, arbitrary-path materialization, installation, and health reporting as separate responsibilities. Sharing a repository does not make either command a dependency of the other.
+
+The [storage decision](adr-001-storage.md) and [materializer decision](adr-002-materializer.md) record why the major choices were made. This document owns current component boundaries and integrity guarantees. [Operations](operations.md) owns procedures, while [Validation](validation.md) owns test coverage and release readiness.
+
+## Design rules
+
+- Restic owns snapshot storage, repository integrity, and retention. The Python runner coordinates it but does not reproduce its storage engine.
+- `icloud-materialize` owns arbitrary-path metadata inspection and complete local reads. It does not acquire backup configuration, scheduling, retention, or recovery responsibilities.
+- The installed backup runner, materializer, and watchdog must still expose useful failure information when either of the other programs is missing or broken.
+- Each documentation subject has one owner. Entry points summarize enough to choose a workflow and link to the detailed contract or procedure.
 
 ## Responsibilities
 
 | Component | Owns | Delegates |
 | --- | --- | --- |
-| `icloud-materialize`: parent | CLI/schema contract, deadlines, signals, worker termination/reaping, and final aggregation | Supplied-path operations to fresh worker processes |
-| `icloud-materialize`: workers | Root resolution, guarded/deduplicated scope, metadata inventory, space estimates, download requests, coordinated reads, hashing, and stability checks | Native hydration and coordination to macOS/iCloud |
+| `icloud-materialize`: result models | Versioned public result and worker-protocol data | Encoding and aggregation to command-line and worker code |
+| `icloud-materialize`: command line | Option parsing, help, human/JSON rendering, and signal-handler lifecycle | Worker supervision and public-command execution to the parent supervisor |
+| `icloud-materialize`: parent supervisor | Deadlines, signals, worker termination/reaping, and final multi-root aggregation | Supplied-path operations to fresh worker processes |
+| `icloud-materialize`: scope worker | Resolve explicit roots, guard broad iCloud traversal, and deduplicate overlapping scope | Resolved roots to operation workers |
+| `icloud-materialize`: inventory module | Descriptor-relative traversal, metadata and freshness collection, mount boundaries, and stable inventory keys | Payload verification to the fetch operation |
+| `icloud-materialize`: verification module | Space estimates, explicit download requests, coordinated reads, hashing, and file revalidation | Native hydration and coordination to macOS/iCloud |
+| `icloud-materialize`: worker operations | Bounded inventory passes, check/fetch success conditions, and per-root result assembly | Final multi-root aggregation to the parent |
 | `icloud_backup.py`: `Config` / `load_config` | Validated private configuration and path boundaries | Installation layout to the installer |
 | `icloud_backup.py`: `App` | Backup lifecycle, completion state, local locks, engine guards, source health, and safe restore targets | Storage, snapshot selection, verification, and calendar retention to Restic |
 | `install.py` | Stable runtime/shortcut, generated launchd jobs, deployment metadata, migration copies, and recovery export | Backup execution to the installed runner |
@@ -19,7 +33,15 @@ The materializer and backup runner are separate installed programs. `icloud-back
 
 The materializer has no global database or daemon. Its parent does not touch supplied paths; a resolution worker and one worker per deduplicated root perform potentially blocking filesystem operations. Parent deadlines and interrupts bound waiting, followed by bounded TERM/KILL reaping. Worker process exit ends its process-local I/O policy even when cleanup cannot run. A timeout cannot revoke a download already handed to an iCloud daemon.
 
-The watchdog's small file-writing and notification fallback is intentionally independent. Sharing it by importing the runner would prevent it from reporting a broken runner import. Tests exercise that failure boundary. The installer may import the source runner because it is a deployment tool, not the independent monitor.
+## Intentional duplication and deployment boundaries
+
+The watchdog's small file-writing and notification fallback is intentional duplication. Importing it from the runner would prevent the watchdog from reporting a broken runner import. Tests exercise that failure boundary. The installer may import the source runner because it is a deployment tool, not an independent monitor.
+
+The backup runner and materializer both set the same native I/O-policy family for different child-process relationships. The runner must set policy before spawning Restic; a standalone materializer process cannot set policy for that later sibling. Sharing this code across the Python and Swift runtimes would add coupling without removing the operational requirement.
+
+`icloud_backup.py` remains one deployed source file. Its configuration, engine adapter, lifecycle, status, and restoration responsibilities are separated by functions and classes, while the installer copies one runner atomically. Splitting it into importable installed modules would be useful only if the installer and watchdog failure model were redesigned around an atomic module set.
+
+Within the Swift target, public result models, parent supervision, root scope, metadata inventory, file verification, and worker orchestration live in separate source files. They compile into one executable and communicate through module-internal types; the command exposes no cross-language library surface.
 
 There are two different repositories: the Git checkout stores application source; the Restic backup store holds recovery data. Neither the local cache nor status is a second complete backup store. See [the ownership map](operations.md#identify-the-active-installation) for exact paths and which copies are authoritative.
 
@@ -63,10 +85,6 @@ The runner checks immediately free local space and a per-engine-command time lim
 
 File capture is not an atomic filesystem image or application-consistent export. Live databases and active game worlds may require an application export or a quiet period. Normal source files, intended hidden files, and symlinks are covered subject to configured exclusions.
 
-## Validation
+## Validation boundary
 
-The test suite uses temporary data and real empty-password Restic repositories for version/deletion recovery, hidden files, symlinks, exclusions, managed retention, and independent source groups. Calendar tests cover the configured default policy across year and leap-day boundaries. Failure tests combine real repositories with injected read/check/space failures and an interrupted child process, checking that old completed points survive and later runs can recover. Installation tests cover schedule wiring, configuration selection, the watchdog's missing-runner path, and a copied runtime after a fixture checkout is removed.
-
-Manual iCloud tests exercised native eviction, incremental capture, old/deleted-file recovery, full checking, and prune. They also covered native cloud-only source reads. Manual production validation included a scheduled capture and separate verified restores. These observations do not establish physical power-loss behavior, a remote transactional guarantee, or universal compatibility across macOS releases. Private run evidence and machine inventories are intentionally outside this repository.
-
-Materializer validation is owned by [the materializer document](materializer.md#validation-and-distribution-limits). Its local fixtures and debug-only injected failures do not prove real iCloud hydration, a background launch environment, another macOS version, or another CPU architecture. Real acceptance requires a fixture with observed native eviction and independently recorded hashes.
+[Validation](validation.md) owns the automated coverage, real iCloud acceptance conditions, observed platform matrix, and release limits. Tests can establish the documented local invariants; they do not establish physical power-loss behavior, remote transactionality, completed iCloud upload, or universal compatibility across macOS releases.

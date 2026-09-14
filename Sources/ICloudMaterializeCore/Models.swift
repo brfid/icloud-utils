@@ -2,6 +2,9 @@ import Foundation
 
 public let toolVersion = "1.0.0"
 public let schemaVersion = "1.0"
+public let defaultWorkerTimeoutSeconds: Double = 300
+public let defaultCommandDeadlineSeconds: Double = 1_800
+public let defaultReserveMiB: Int64 = 1_024
 
 public enum CommandMode: String, Codable, Sendable {
     case check
@@ -22,9 +25,9 @@ public struct Options: Codable, Sendable {
     public init(
         command: CommandMode,
         json: Bool = false,
-        timeoutSeconds: Double = 300,
-        deadlineSeconds: Double = 1_800,
-        reserveMiB: Int64 = 1_024,
+        timeoutSeconds: Double = defaultWorkerTimeoutSeconds,
+        deadlineSeconds: Double = defaultCommandDeadlineSeconds,
+        reserveMiB: Int64 = defaultReserveMiB,
         sha256: Bool = false,
         verbose: Bool = false,
         allowICloudRoot: Bool = false,
