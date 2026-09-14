@@ -523,11 +523,17 @@ private func streamRead(
     }
 
     #if DEBUG
-    if let delay = ProcessInfo.processInfo.environment["ICMAT_TEST_READ_DELAY_MILLIS"],
+    let environment = ProcessInfo.processInfo.environment
+    if let marker = environment["ICMAT_TEST_READ_MARKER"],
+       let suffix = environment["ICMAT_TEST_READ_MARKER_SUFFIX"],
+       node.path.hasSuffix(suffix) {
+        FileManager.default.createFile(atPath: marker, contents: Data())
+    }
+    if let delay = environment["ICMAT_TEST_READ_DELAY_MILLIS"],
        let milliseconds = useconds_t(delay) {
         usleep(milliseconds * 1_000)
     }
-    if ProcessInfo.processInfo.environment["ICMAT_TEST_BLOCK_STAGE"] == "read" {
+    if environment["ICMAT_TEST_BLOCK_STAGE"] == "read" {
         sleep(60)
     }
     #endif

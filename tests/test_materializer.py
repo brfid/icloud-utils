@@ -184,12 +184,39 @@ class MaterializerCLI(unittest.TestCase):
         self.assertTrue(any(item['stage'] == 'legacy-placeholder' for item in fetch_data['failures']))
         self.assertEqual(placeholder.read_bytes(), before)
 
-    def test_missing_freshness_is_not_reported_current(self):
-        result, data = self.run_cli('check', '--json', '--', str(self.root),
-                                    env={'ICMAT_TEST_FRESHNESS': 'unknown'})
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(data['freshness']['unknown'], 4)
-        self.assertEqual(data['freshness']['current'], 0)
+    def test_missing_and_stale_freshness_are_not_reported_current(self):
+        for state in ['unknown', 'stale']:
+            result, data = self.run_cli('check', '--json', '--', str(self.root),
+                                        env={'ICMAT_TEST_FRESHNESS': state})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(data['freshness'][state], 4)
+            self.assertEqual(data['freshness']['current'], 0)
+
+    def test_concurrent_truncation_is_retried_and_not_accepted_as_unchanged(self):
+        changing = self.root/'0-changing.bin'
+        changing.write_bytes(b'x' * (1024 * 1024))
+        marker = self.root.parent/(self.root.name+'-read-open')
+        environment = dict(
+            os.environ,
+            ICMAT_TEST_READ_MARKER=str(marker),
+            ICMAT_TEST_READ_MARKER_SUFFIX=changing.name,
+            ICMAT_TEST_READ_DELAY_MILLIS='500',
+        )
+        process = subprocess.Popen(
+            [BINARY, 'fetch', '--json', '--reserve-mib', '0', '--sha256', '--', str(self.root)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=environment)
+        deadline = time.monotonic() + 5
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(.01)
+        self.assertTrue(marker.exists(), 'worker did not reach the open-file test point')
+        changing.write_bytes(b'short after truncation\n')
+        stdout, stderr = process.communicate(timeout=10)
+        marker.unlink(missing_ok=True)
+        self.assertEqual(process.returncode, 0, stderr)
+        data = json.loads(stdout)
+        hashes = {item['path']: item['sha256'] for item in data['hashes']}
+        self.assertEqual(hashes[str(changing)], hashlib.sha256(changing.read_bytes()).hexdigest())
+        self.assertEqual(data['counts']['filesVerified'], data['counts']['regularFiles'])
 
     def test_installer_and_alias_work_in_temporary_destination(self):
         prefix = self.root/'commands'
