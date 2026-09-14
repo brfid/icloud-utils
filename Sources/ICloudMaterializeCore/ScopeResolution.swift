@@ -92,4 +92,3 @@ func resolveRoots(_ options: Options) -> WorkerReply {
     }
     return reply
 }
-

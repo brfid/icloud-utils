@@ -40,4 +40,3 @@ func withMaterializationPolicy<T>(_ mode: CommandMode, _ body: () throws -> T) t
         throw error
     }
 }
-

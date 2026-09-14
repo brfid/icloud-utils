@@ -94,4 +94,3 @@ struct FileChanged: LocalizedError, CustomStringConvertible {
     var description: String
     var errorDescription: String? { description }
 }
-

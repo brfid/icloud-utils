@@ -197,4 +197,3 @@ func inventory(_ root: RootRecord) -> Inventory {
     }
     return inventory
 }
-

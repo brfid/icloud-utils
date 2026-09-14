@@ -193,4 +193,3 @@ func readCoordinated(
     }
     throw lastChange ?? FileChanged(description: "file remained unstable")
 }
-

@@ -288,4 +288,3 @@ func runPublic(_ options: Options, executable: String, signalState: SignalState)
     }
     return (result, result.success ? 0 : 1)
 }
-
