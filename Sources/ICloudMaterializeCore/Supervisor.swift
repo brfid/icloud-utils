@@ -256,7 +256,7 @@ func runPublic(_ options: Options, executable: String, signalState: SignalState)
             result.roots.append(root)
             result.failures.append(FailureRecord(path: root.resolved, stage: "worker-timeout", errorDomain: NSPOSIXErrorDomain,
                                                  errorCode: Int(ETIMEDOUT), explanation: "root operation exceeded its worker time limit; partial work is not counted as verified"))
-            result.observations.append("A timeout cannot cancel an iCloud daemon request that was already submitted; background downloading may continue.")
+            result.observations.append("A timeout cannot cancel submitted iCloud daemon requests. Up to \(options.downloadAhead) successful requests in the interrupted root may still await verification; earlier requests may also continue background daemon work.")
             continue
         }
         if let failure = operated.failure {

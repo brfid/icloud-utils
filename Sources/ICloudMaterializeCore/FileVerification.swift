@@ -51,6 +51,35 @@ func preflightSpace(_ inventory: Inventory, root: RootRecord, options: Options) 
     }
 }
 
+func checkRequestSpace(_ node: Node, options: Options) throws {
+    let free = try immediatelyFreeBytes(at: node.path)
+    let threshold = reserveBytes(options).addingReportingOverflow(max(0, node.stat.size))
+    if free < (threshold.overflow ? Int64.max : threshold.partialValue) {
+        throw NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC),
+                      userInfo: [NSLocalizedDescriptionKey: "free space fell below this file's known size plus reserve"])
+    }
+}
+
+func requestDownload(_ node: Node) throws {
+    var currentInfo = stat()
+    if lstat(node.path, &currentInfo) != 0 { throw posixError("inspect download candidate") }
+    let current = StatSignature(currentInfo)
+    guard kind(for: currentInfo) == .regular,
+          current.device == node.stat.device, current.inode == node.stat.inode else {
+        throw FileChanged(description: "download candidate identity or type changed after inventory")
+    }
+    // A request gives iCloud the opportunity to download; only the later complete
+    // coordinated read establishes local readability.
+    #if DEBUG
+    if ProcessInfo.processInfo.environment["ICMAT_TEST_DOWNLOAD_FAILURE"] == "1" {
+        throw NSError(domain: NSCocoaErrorDomain, code: NSFileReadUnknownError,
+                      userInfo: [NSLocalizedDescriptionKey: "injected download-request failure"])
+    }
+    if ProcessInfo.processInfo.environment["ICMAT_TEST_FAKE_DOWNLOAD_REQUEST"] == "1" { return }
+    #endif
+    try FileManager.default.startDownloadingUbiquitousItem(at: URL(fileURLWithPath: node.path))
+}
+
 private func openFile(root: RootRecord, rootFD: Int32?, relative: [String]) throws -> Int32 {
     if root.kind == "regular-file" {
         let descriptor = open(root.resolved, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)

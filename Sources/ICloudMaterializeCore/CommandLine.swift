@@ -19,6 +19,7 @@ Options:
   --deadline SECONDS     Limit the complete command (default: \(Int(defaultCommandDeadlineSeconds))).
   --reserve-mib MIB      Keep this immediately free capacity (default: \(defaultReserveMiB)).
   --sha256               Hash every regular file during fetch; invalid with check.
+  --download-ahead N     Request 1...16 candidate files ahead during fetch (default: \(defaultDownloadAhead)).
   --verbose              Report worker progress on stderr.
   --allow-icloud-root    Permit the iCloud Drive root or one of its ancestors.
   --help                 Show this help.
@@ -32,7 +33,8 @@ fetch means all included regular files were read to EOF in a stable visible inve
 it does not prove server synchronization or permanent local retention.
 
 Exit status: 0 success, 1 incomplete/operational failure, 2 usage error, 130 SIGINT,
-143 SIGTERM. A timeout can leave an already submitted iCloud download continuing.
+143 SIGTERM. A timeout can leave up to the selected window of submitted iCloud
+downloads continuing.
 """
 
 public func parseOptions(_ arguments: [String]) throws -> Options {
@@ -59,6 +61,12 @@ public func parseOptions(_ arguments: [String]) throws -> Options {
         switch argument {
         case "--json": options.json = true
         case "--sha256": options.sha256 = true
+        case "--download-ahead":
+            let text = try value(after: argument)
+            guard let parsed = Int(text), (1...16).contains(parsed) else {
+                throw UsageError("--download-ahead must be an integer from 1 through 16")
+            }
+            options.downloadAhead = parsed
         case "--verbose": options.verbose = true
         case "--allow-icloud-root": options.allowICloudRoot = true
         case "--timeout":
@@ -86,6 +94,9 @@ public func parseOptions(_ arguments: [String]) throws -> Options {
     }
     if command == .check && options.sha256 {
         throw UsageError("--sha256 is only valid with fetch because check never reads payloads")
+    }
+    if command == .check && optionArguments.contains("--download-ahead") {
+        throw UsageError("--download-ahead is only valid with fetch")
     }
     return options
 }

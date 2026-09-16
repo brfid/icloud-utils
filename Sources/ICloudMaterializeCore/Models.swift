@@ -1,10 +1,11 @@
 import Foundation
 
-public let toolVersion = "1.0.0"
+public let toolVersion = "1.1.0"
 public let schemaVersion = "1.0"
 public let defaultWorkerTimeoutSeconds: Double = 300
 public let defaultCommandDeadlineSeconds: Double = 1_800
 public let defaultReserveMiB: Int64 = 1_024
+public let defaultDownloadAhead = 4
 
 public enum CommandMode: String, Codable, Sendable {
     case check
@@ -18,6 +19,7 @@ public struct Options: Codable, Sendable {
     public var deadlineSeconds: Double
     public var reserveMiB: Int64
     public var sha256: Bool
+    public var downloadAhead: Int
     public var verbose: Bool
     public var allowICloudRoot: Bool
     public var paths: [String]
@@ -29,6 +31,7 @@ public struct Options: Codable, Sendable {
         deadlineSeconds: Double = defaultCommandDeadlineSeconds,
         reserveMiB: Int64 = defaultReserveMiB,
         sha256: Bool = false,
+        downloadAhead: Int = defaultDownloadAhead,
         verbose: Bool = false,
         allowICloudRoot: Bool = false,
         paths: [String]
@@ -39,6 +42,7 @@ public struct Options: Codable, Sendable {
         self.deadlineSeconds = deadlineSeconds
         self.reserveMiB = reserveMiB
         self.sha256 = sha256
+        self.downloadAhead = downloadAhead
         self.verbose = verbose
         self.allowICloudRoot = allowICloudRoot
         self.paths = paths

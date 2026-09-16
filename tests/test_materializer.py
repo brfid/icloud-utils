@@ -66,6 +66,87 @@ class MaterializerCLI(unittest.TestCase):
             self.assertEqual(data['counts']['downloadRequests'], 0)
             self.assertEqual({item['path']: item['sha256'] for item in data['hashes']}, expected)
 
+    def test_default_fetch_verifies_every_file_without_hashing(self):
+        result, data = self.run_cli('fetch', '--json', '--reserve-mib', '0', '--', str(self.root))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(data['counts']['regularFiles'], 4)
+        self.assertEqual(data['counts']['filesVerified'], 4)
+        self.assertEqual(data['counts']['readBytes'], sum(path.stat().st_size for path in [
+            self.root/'local.txt', self.root/'.hidden', self.root/'empty',
+            self.root/'nested/App.pkg/Contents/data']))
+        self.assertEqual(data['counts']['hashedFiles'], 0)
+        self.assertEqual(data['hashes'], [])
+
+    def test_download_ahead_usage_bounds_and_check_rejection(self):
+        for value in ['0', '17', '-1', 'abc', '1.5']:
+            with self.subTest(value=value):
+                result, data = self.run_cli('fetch', '--json', '--download-ahead', value, '--', str(self.root))
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(data['failures'][0]['stage'], 'usage')
+        for value in ['1', '16']:
+            with self.subTest(value=value):
+                result, data = self.run_cli('fetch', '--json', '--download-ahead', value,
+                                            '--reserve-mib', '0', '--', str(self.root))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(data['success'])
+        result, data = self.run_cli('check', '--json', '--download-ahead', '1', '--', str(self.root))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('only valid with fetch', data['failures'][0]['explanation'])
+
+    def test_bounded_request_ahead_default_and_serial_one(self):
+        for index in range(8):
+            (self.root/f'window-{index:02d}').write_bytes(f'payload {index}'.encode())
+        for selected in [None, 1, 4, 16]:
+            with self.subTest(download_ahead=selected):
+                trace = self.root.parent/(self.root.name+f'-trace-{selected}')
+                trace.write_text('')
+                self.addCleanup(trace.unlink)
+                options = [] if selected is None else ['--download-ahead', str(selected)]
+                result, data = self.run_cli(
+                    'fetch', '--json', '--verbose', '--reserve-mib', '0', *options, '--', str(self.root),
+                    env={'ICMAT_TEST_FRESHNESS': 'stale', 'ICMAT_TEST_FAKE_DOWNLOAD_REQUEST': '1',
+                         'ICMAT_TEST_FETCH_TRACE': str(trace)})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(data['counts']['downloadRequests'], 12)
+                self.assertEqual(data['counts']['filesVerified'], 12)
+                self.assertEqual(data['counts']['hashedFiles'], 0)
+                self.assertEqual(data['hashes'], [])
+                self.assertEqual(result.stdout.count('"schemaVersion"'), 1)
+                for phrase in ['Inventory ', 'Explicit download request',
+                               'Awaiting verification read', 'Verification progress']:
+                    self.assertIn(phrase, result.stderr)
+                events = [json.loads(line) for line in trace.read_text().splitlines()]
+                window = selected or 4
+                self.assertLessEqual(max(event['pending'] for event in events), window)
+                self.assertEqual(events[-1]['pending'], 0)
+                active_reads = 0
+                for event in events:
+                    if event['event'] == 'verification-start':
+                        active_reads += 1
+                    elif event['event'] == 'verification-complete':
+                        active_reads -= 1
+                    self.assertIn(active_reads, (0, 1))
+                self.assertEqual(active_reads, 0)
+                first_complete = next(index for index, event in enumerate(events)
+                                      if event['event'] == 'verification-complete')
+                requests_before_first_complete = [event for event in events[:first_complete]
+                                                  if event['event'] == 'request']
+                self.assertEqual(len(requests_before_first_complete), min(window, 12))
+                if window == 1:
+                    self.assertEqual([event['event'] for event in events],
+                                     ['request', 'verification-start', 'verification-complete'] * 12)
+
+    def test_failed_verification_does_not_free_request_window(self):
+        for index in range(8):
+            (self.root/f'window-{index:02d}').write_bytes(f'payload {index}'.encode())
+        result, data = self.run_cli(
+            'fetch', '--json', '--download-ahead', '4', '--reserve-mib', '0', '--', str(self.root),
+            env={'ICMAT_TEST_FRESHNESS': 'stale', 'ICMAT_TEST_FAKE_DOWNLOAD_REQUEST': '1',
+                 'ICMAT_TEST_FILE_CHANGE_FAILURE': '1'})
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(data['counts']['downloadRequests'], 4)
+        self.assertEqual(data['counts']['filesVerified'], 0)
+
     def test_check_reports_simulated_dataless_without_request_or_read(self):
         result, data = self.run_cli('check', '--json', '--reserve-mib', '0', '--', str(self.root),
                                     env={'ICMAT_TEST_DATALESS_SUFFIX': 'local.txt'})
@@ -228,7 +309,7 @@ class MaterializerCLI(unittest.TestCase):
                          (prefix/'icmat').resolve().stat().st_ino)
         alias = subprocess.run([prefix/'icmat', '--version'], capture_output=True, text=True)
         self.assertEqual(alias.returncode, 0, alias.stderr)
-        self.assertRegex(alias.stdout, r'^icloud-materialize 1\.0\.0')
+        self.assertRegex(alias.stdout, r'^icloud-materialize 1\.1\.0')
         removed = subprocess.run([installer, '--prefix', prefix, '--uninstall'],
                                  capture_output=True, text=True)
         self.assertEqual(removed.returncode, 0, removed.stderr)

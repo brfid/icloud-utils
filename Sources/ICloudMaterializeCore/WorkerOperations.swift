@@ -46,6 +46,24 @@ private func forceUnstableInventory() -> Bool {
     #endif
 }
 
+private func verboseProgress(_ enabled: Bool, _ message: String) {
+    if enabled { FileHandle.standardError.write(Data((message + "\n").utf8)) }
+}
+
+private func traceFetch(_ event: String, node: Node, pending: Int) {
+    #if DEBUG
+    guard let path = ProcessInfo.processInfo.environment["ICMAT_TEST_FETCH_TRACE"],
+          let handle = FileHandle(forWritingAtPath: path),
+          let data = try? JSONSerialization.data(withJSONObject: [
+              "event": event, "path": node.path, "pending": pending
+          ]) else { return }
+    handle.seekToEndOfFile()
+    handle.write(data)
+    handle.write(Data("\n".utf8))
+    try? handle.close()
+    #endif
+}
+
 private func operateCheck(root: RootRecord, options: Options) -> ResultDocument {
     var result = rootResult(root, command: .check)
     var previous: Inventory?
@@ -119,33 +137,51 @@ private func operateFetch(root: RootRecord, options: Options) -> ResultDocument 
         }
 
         verifications.removeAll(keepingCapacity: true)
-        for node in before.regularFiles {
-            let needsRequest = requiresRequest(node)
-            if needsRequest && !requested.contains(node.path) {
-                do {
-                    let free = try immediatelyFreeBytes(at: node.path)
-                    let threshold = reserveBytes(options).addingReportingOverflow(max(0, node.stat.size))
-                    if free < (threshold.overflow ? Int64.max : threshold.partialValue) {
-                        throw NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC),
-                                      userInfo: [NSLocalizedDescriptionKey: "free space fell below this file's known size plus reserve"])
-                    }
-                    result.counts.downloadRequests += 1
-                    result.counts.requestedBytes += max(0, node.stat.size)
-                    // This is a public iCloud request. The subsequent coordinated full read
-                    // supplies the concrete local-readability guarantee.
-                    #if DEBUG
-                    if ProcessInfo.processInfo.environment["ICMAT_TEST_DOWNLOAD_FAILURE"] == "1" {
-                        throw NSError(domain: NSCocoaErrorDomain, code: NSFileReadUnknownError,
-                                      userInfo: [NSLocalizedDescriptionKey: "injected download-request failure"])
-                    }
-                    #endif
-                    try FileManager.default.startDownloadingUbiquitousItem(at: URL(fileURLWithPath: node.path))
-                    requested.insert(node.path)
-                } catch {
-                    result.counts.downloadRequestFailures += 1
-                    operationalFailures.append(FailureRecord(path: node.path, stage: "download-request", error: error))
-                }
+        let regularFiles = before.regularFiles
+        let candidates = regularFiles.filter { requiresRequest($0) && !requested.contains($0.path) }
+        var nextCandidate = 0
+        var pending = Set<String>()
+        var attempted = 0
+        var verifiedThisPass = 0
+        verboseProgress(options.verbose,
+                        "Inventory \(root.resolved): \(regularFiles.count) regular file(s), \(candidates.count) new download candidate(s), \(result.counts.downloadRequests) explicit request(s) so far; verification reads follow.")
+
+        func submit(_ node: Node) {
+            do {
+                try checkRequestSpace(node, options: options)
+                result.counts.downloadRequests += 1
+                result.counts.requestedBytes += max(0, node.stat.size)
+                try requestDownload(node)
+                requested.insert(node.path)
+                pending.insert(node.path)
+                traceFetch("request", node: node, pending: pending.count)
+                verboseProgress(options.verbose,
+                                "Explicit download request \(result.counts.downloadRequests): \(node.path) (\(pending.count)/\(options.downloadAhead) awaiting verification).")
+            } catch {
+                result.counts.downloadRequestFailures += 1
+                operationalFailures.append(FailureRecord(path: node.path, stage: "download-request", error: error))
+                traceFetch("request-failed", node: node, pending: pending.count)
+                verboseProgress(options.verbose, "Explicit download request failed: \(node.path): \((error as NSError).localizedDescription)")
             }
+        }
+
+        func fillWindow() {
+            while pending.count < options.downloadAhead && nextCandidate < candidates.count {
+                let candidate = candidates[nextCandidate]
+                nextCandidate += 1
+                submit(candidate)
+            }
+        }
+
+        if options.downloadAhead > 1 { fillWindow() }
+        for node in regularFiles {
+            let needsRequest = requiresRequest(node)
+            if options.downloadAhead == 1 && needsRequest && !requested.contains(node.path) &&
+               pending.count < options.downloadAhead {
+                submit(node)
+            }
+            traceFetch("verification-start", node: node, pending: pending.count)
+            verboseProgress(options.verbose, "Awaiting verification read: \(node.path).")
             do {
                 let verification = try readCoordinated(
                     root: root,
@@ -156,9 +192,18 @@ private func operateFetch(root: RootRecord, options: Options) -> ResultDocument 
                 )
                 result.counts.readBytes += verification.bytes
                 verifications[node.path] = verification
+                verifiedThisPass += 1
+                pending.remove(node.path)
             } catch {
                 operationalFailures.append(FailureRecord(path: node.path, stage: "coordinated-read", error: error))
             }
+            attempted += 1
+            traceFetch("verification-complete", node: node, pending: pending.count)
+            if attempted % 10 == 0 || attempted == regularFiles.count {
+                verboseProgress(options.verbose,
+                                "Verification progress \(root.resolved): \(attempted)/\(regularFiles.count) attempted, \(verifiedThisPass) complete reads, \(result.counts.readBytes) bytes read, \(result.counts.downloadRequests) explicit requests, \(pending.count) awaiting verification.")
+            }
+            if options.downloadAhead > 1 { fillWindow() }
         }
 
         let after = inventory(root)
