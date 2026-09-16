@@ -19,7 +19,7 @@ The commands share source and documentation, not a runtime. The Swift materializ
 | Configure sources, exclusions, retention, or runtime limits | [Configuration](docs/configuration.md) and [example.config.toml](example.config.toml) |
 | Restore without this installation | [RECOVERY.txt](RECOVERY.txt) |
 | Diagnose a failure | [Troubleshooting](docs/troubleshooting.md) |
-| Understand the design and guarantees | [Architecture](docs/architecture.md), [storage decision](docs/adr-001-storage.md), and [materializer decision](docs/adr-002-materializer.md) |
+| Understand the design and guarantees | [Architecture](docs/architecture.md), [storage decision](docs/adr-001-storage.md), [materializer decision](docs/adr-002-materializer.md), and [request-ahead decision](docs/adr-003-download-ahead.md) |
 | Review test coverage or release readiness | [Validation](docs/validation.md) |
 | Change the project as a coding agent | [AGENTS.md](AGENTS.md) |
 
@@ -27,16 +27,16 @@ The commands share source and documentation, not a runtime. The Swift materializ
 
 ```sh
 icmat check --json -- "$HOME/Library/Mobile Documents/com~apple~CloudDocs/example"
-icmat fetch --sha256 -- "$HOME/Library/Mobile Documents/com~apple~CloudDocs/example"
+icmat fetch --verbose -- "$HOME/Library/Mobile Documents/com~apple~CloudDocs/example"
 ```
 
-`check` inventories accessible metadata without requesting downloads or reading payloads. `fetch` reads every included regular file to EOF, including already-local files, and hashes those reads when requested. Both commands require explicit paths and refuse the whole iCloud Drive root or an ancestor unless `--allow-icloud-root` is supplied deliberately.
+`check` inventories accessible metadata without requesting downloads or reading payloads. `fetch` reads every included regular file to EOF, including already-local files. Add `--sha256` explicitly when a digest is needed; ordinary fetch leaves hashing off. Both commands require explicit paths and refuse the whole iCloud Drive root or an ancestor unless `--allow-icloud-root` is supplied deliberately.
 
 The same operation is available through the backup command when both tools are installed:
 
 ```sh
 icback materialize check --json -- /explicit/path
-icback materialize fetch --sha256 -- /explicit/path
+icback materialize fetch --verbose -- /explicit/path
 ```
 
 Read the [materializer contract](docs/materializer.md) before treating a result as evidence of readability or synchronization.

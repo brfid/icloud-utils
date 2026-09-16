@@ -15,11 +15,13 @@ Use `check` when metadata is enough and downloading content would be unwanted:
 icmat check --json -- "$HOME/Library/Mobile Documents/com~apple~CloudDocs/example"
 ```
 
-Use `fetch` when every regular file in the named scope must be locally readable. Add `--sha256` to hash the same complete reads:
+Use `fetch` when every regular file in the named scope must be locally readable:
 
 ```sh
-icmat fetch --json --sha256 -- "$HOME/Library/Mobile Documents/com~apple~CloudDocs/example"
+icmat fetch --verbose -- "$HOME/Library/Mobile Documents/com~apple~CloudDocs/example"
 ```
+
+Add `--sha256` explicitly for provenance or validation digests. It hashes the same complete verification reads and is off by default.
 
 Success from `check` establishes a stable, complete metadata inventory. It does not establish byte readability. Success from `fetch` establishes stable complete reads of the visible regular files and no remaining observed data-less flag. Neither result proves server synchronization or permanent local retention.
 
@@ -35,11 +37,13 @@ Hidden files, packages, nested directories, and empty files are included. Mount 
 
 ## Verification mechanics
 
-Fetch requests downloads with Foundation's `startDownloadingUbiquitousItem`, then coordinates each native read with `NSFileCoordinator` and `.withoutChanges`. It validates the URL supplied to the accessor and performs the complete fixed-buffer read inside that accessor. With `--sha256`, every digest is computed during that same read.
+Fetch requests downloads with Foundation's per-file `startDownloadingUbiquitousItem`, then coordinates each native read with `NSFileCoordinator` and `.withoutChanges`. Within each root, up to `--download-ahead` successfully requested files can await verification. Reads remain serial in deterministic inventory order; after a requested file's read attempt finishes, the window is replenished. A value of `1` keeps request-then-read ordering. This gives iCloud an opportunity to overlap downloads; Apple does not guarantee parallel transfers. Mostly-local trees and single large files may see little or no benefit. The [request-ahead decision](adr-003-download-ahead.md) explains the alternatives.
+
+The read validates the URL supplied to the accessor and performs the complete fixed-buffer read inside that accessor. With `--sha256`, every digest is computed during that same read.
 
 File descriptors use no-follow opens. Directory traversal and file opens walk relative components from an already opened root descriptor. Identity, type, size, change times, and the exact EOF length are revalidated; a changing file receives one bounded retry. The complete visible inventory is repeated up to three times. Any failed request, read, timeout, unsupported special file, suspected legacy placeholder, unhandled change, unstable inventory, or remaining `SF_DATALESS` flag prevents fetch success.
 
-Neither command deliberately edits, uploads, renames, moves, evicts, or deletes user files. Hydration or refresh can change cached bytes and metadata, and macOS can evict a file later. A timeout can leave an iCloud daemon download continuing. Results are point-in-time observations of the device-visible tree, not an atomic snapshot, a server inventory, or proof of synchronization.
+Neither command deliberately edits, uploads, renames, moves, evicts, or deletes user files. Hydration or refresh can change cached bytes and metadata, and macOS can evict a file later. A timeout can leave up to the selected window of already submitted iCloud download requests continuing within the interrupted root; requests completed earlier may also have triggered daemon work. Results are point-in-time observations of the device-visible tree, not an atomic snapshot, a server inventory, or proof of synchronization.
 
 ## Options and statuses
 
@@ -50,7 +54,8 @@ Neither command deliberately edits, uploads, renames, moves, evicts, or deletes 
 | `--deadline SECONDS` | `1800` | Maximum for the whole command |
 | `--reserve-mib MIB` | `1024` | Immediately free capacity retained on each processed volume |
 | `--sha256` | off | Hash all regular files during fetch; rejected by check |
-| `--verbose` | off | Worker progress on stderr |
+| `--download-ahead N` | `4` | Fetch only; request 1 through 16 candidate files ahead of serial verification reads |
+| `--verbose` | off | Inventory, explicit requests, current verification read, and periodic aggregate progress on stderr |
 | `--allow-icloud-root` | off | Permit the otherwise guarded broad iCloud/ancestor scope |
 
 Exit 0 means the documented command guarantee completed. Exit 1 means traversal or operation was incomplete. Exit 2 is usage failure. Handled SIGINT and SIGTERM return 130 and 143. A crash or SIGKILL cannot promise final JSON.

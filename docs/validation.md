@@ -14,7 +14,7 @@ make test
 
 The backup tests use temporary data and real empty-password Restic repositories. They cover version and deletion recovery, hidden files, symlinks, exclusions, independent source groups, retention across year and leap-day boundaries, interrupted children, and injected read, check, and space failures. They verify that earlier completed recovery points survive failures and that later runs can recover.
 
-Installation tests cover configuration selection, schedule wiring, command aliases, the watchdog's missing-runner path, and an installed runtime after its fixture checkout is removed. Materializer tests cover scope resolution, metadata inventory, complete reads, hashing, stability, timeouts, interruptions, special files, legacy placeholders, installers, and injected failures. Unsafe failure injection is compiled only into debug builds.
+Installation tests cover configuration selection, schedule wiring, command aliases, the watchdog's missing-runner path, and an installed runtime after its fixture checkout is removed. Materializer tests cover scope resolution, metadata inventory, complete reads with hashing off by default, optional hashing, bounded request-ahead order and limits, stability, timeouts, interruptions, special files, legacy placeholders, installers, and injected failures. Unsafe failure injection and request-order tracing are compiled only into debug builds.
 
 These tests use disposable paths. They do not operate on the configured production backup store.
 
@@ -24,11 +24,15 @@ Native materialization is established only when a disposable fixture first reach
 
 Initial acceptance met those conditions for a nested fixture. It also materialized one metadata-selected, pre-existing data-less archive file without evicting or changing that archive content. A disposable background LaunchAgent completed the same installed-binary read path, which establishes operation in that tested noninteractive environment. Fixture names, hashes, and machine logs remain private and outside Git.
 
+For request-ahead acceptance, compare release-binary `--download-ahead 1` and `4` on equivalent cold multi-file disposable fixtures. Use repeated runs where iCloud upload and eviction state permits. Select `4` as the released default only if the median wall time improves repeatably by at least 20% with no correctness or reliability regression. Otherwise retain `1` and report whether the measurement was inconclusive or below threshold. Never use backup sources, an archive, or the Restic store as benchmark fixtures. See the [request-ahead decision](adr-003-download-ahead.md) for the design rationale.
+
+On 2026-09-16, three pairs of disposable fixtures each had 12 uploaded files evicted and confirmed `SF_DATALESS` before the release-binary run. Window `1` took 11.550, 11.155, and 11.112 seconds; window `4` took 2.979, 3.177, and 3.479 seconds. The medians were 11.155 and 3.177 seconds, a 71.5% reduction. All six runs verified all 12 files with hashing off, cleared the data-less flags, matched independent pre-eviction hashes afterward, and made no new requests on rerun. These measurements support default `4` for this tested fixture and machine; they do not guarantee the same improvement for other trees or iCloud conditions.
+
 Backup acceptance has exercised native eviction, incremental capture, deleted-file recovery, full checking, prune, cloud-only source reads, a scheduled capture, and separate verified restores. Those observations establish the tested local paths, not a remote transactional guarantee.
 
 ## Tested platform boundary
 
-The initial materializer implementation was compiled and run only on Apple silicon (`arm64`) macOS 26.6.2 with Apple Swift 6.4 and the installed macOS 26.5 SDK. The package declares macOS 13 as its deployment target, but macOS 13–15 runtime behavior, macOS 27 runtime behavior, and Intel hardware remain untested.
+The initial materializer implementation was compiled and run on Apple silicon (`arm64`) macOS 26.6.2 with Apple Swift 6.4 and the installed macOS 26.5 SDK. Version 1.1.0 was built and exercised on Apple silicon macOS 27.0 with Apple Swift 6.4 and the same SDK. The package declares macOS 13 as its deployment target, but macOS 13–15 runtime behavior and Intel hardware remain untested.
 
 A fixture that never reaches uploaded/current state or never becomes data-less is inconclusive. In particular, local package traversal is covered automatically, but a package-contained real iCloud file did not become eligible for the initial native-eviction test within its bounded wait.
 

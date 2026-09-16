@@ -2,7 +2,7 @@
 
 The toolkit keeps backup storage, arbitrary-path materialization, installation, and health reporting as separate responsibilities. Sharing a repository does not make either command a dependency of the other.
 
-The [storage decision](adr-001-storage.md) and [materializer decision](adr-002-materializer.md) record why the major choices were made. This document owns current component boundaries and integrity guarantees. [Operations](operations.md) owns procedures, while [Validation](validation.md) owns test coverage and release readiness.
+The [storage decision](adr-001-storage.md), [materializer decision](adr-002-materializer.md), and [request-ahead decision](adr-003-download-ahead.md) record why the major choices were made. This document owns current component boundaries and integrity guarantees. [Operations](operations.md) owns procedures, while [Validation](validation.md) owns test coverage and release readiness.
 
 ## Design rules
 
@@ -31,7 +31,7 @@ The [storage decision](adr-001-storage.md) and [materializer decision](adr-002-m
 
 The materializer and backup runner are separate installed programs. `icloud-backup materialize ...` performs an early compatibility check and replaces itself with the known `~/bin/icloud-materialize` companion before loading backup configuration or constructing `App`. A missing companion affects only that explicit subcommand. The JSON schema is owned by [the materializer contract](materializer.md#json-schema-10).
 
-The materializer has no global database or daemon. Its parent does not touch supplied paths; a resolution worker and one worker per deduplicated root perform potentially blocking filesystem operations. Parent deadlines and interrupts bound waiting, followed by bounded TERM/KILL reaping. Worker process exit ends its process-local I/O policy even when cleanup cannot run. A timeout cannot revoke a download already handed to an iCloud daemon.
+The materializer has no global database or daemon. Its parent does not touch supplied paths; a resolution worker and one worker per deduplicated root perform potentially blocking filesystem operations. The parent runs root workers one at a time. Within a fetch worker, request scheduling can hold a bounded window of per-file iCloud requests while complete coordinated reads remain serial. The verification module owns native requests, space checks, and reads; worker operations owns window scheduling and result aggregation. Parent deadlines and interrupts bound waiting, followed by bounded TERM/KILL reaping. Worker process exit ends its process-local I/O policy even when cleanup cannot run. A timeout cannot revoke requests already handed to an iCloud daemon; see the [materializer contract](materializer.md#verification-mechanics) for the bound.
 
 ## Intentional duplication and deployment boundaries
 

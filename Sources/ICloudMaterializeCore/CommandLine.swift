@@ -33,8 +33,8 @@ fetch means all included regular files were read to EOF in a stable visible inve
 it does not prove server synchronization or permanent local retention.
 
 Exit status: 0 success, 1 incomplete/operational failure, 2 usage error, 130 SIGINT,
-143 SIGTERM. A timeout can leave up to the selected window of submitted iCloud
-downloads continuing.
+143 SIGTERM. A timeout can leave up to the selected window of requests awaiting
+verification; earlier submitted iCloud daemon work may also continue.
 """
 
 public func parseOptions(_ arguments: [String]) throws -> Options {
