@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import signal
 import subprocess
@@ -13,7 +14,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 FAKE = r'''#!/usr/bin/env python3
-import json, os, pathlib, subprocess, sys, time
+import json, os, pathlib, re, subprocess, sys, time
 scenario=json.loads(pathlib.Path(os.environ['MAIL_TEST_SCENARIO']).read_text())
 args=sys.argv[1:]
 if args==['--version']:
@@ -21,10 +22,30 @@ if args==['--version']:
     sys.exit(0)
 with open(os.environ['MAIL_TEST_CALLS'],'a') as f:
     f.write(json.dumps(args)+'\n')
-while args and args[0].startswith('-'):
-    flag=args.pop(0)
-    if flag not in ('--json',): args.pop(0)
+prefix=['--json','--log-level','off','--config',os.environ['MAIL_TEST_CONFIG'],
+        '--account',os.environ.get('MAIL_TEST_ACCOUNT','icloud'),'--backend','imap']
+assert args[:len(prefix)]==prefix, 'unexpected global arguments'
+args=args[len(prefix):]
 kind=tuple(args[:2])
+uid=lambda value: re.fullmatch(r'[1-9][0-9]*',value) and int(value)<=4294967295
+mailbox=lambda value: value.startswith('--mailbox=') and len(value)>10
+if kind==('imap','status'):
+    assert len(args)==4 and args[2]=='--' and args[3], 'unexpected status arguments'
+elif kind in (('account','check'),('mailbox','list')):
+    assert len(args)==2, 'unexpected account/mailbox arguments'
+elif kind in (('envelope','list'),('envelope','search')):
+    assert len(args)==(7 if kind[1]=='list' else 9) and mailbox(args[2]), 'unexpected envelope arguments'
+    assert args[3]=='--page' and int(args[4])>0 and args[5]=='--page-size' and 1<=int(args[6])<=100
+    if kind[1]=='search': assert args[7]=='--', 'query must follow the delimiter'
+elif kind==('message','read'):
+    assert len(args)==6 and mailbox(args[2]) and args[3:5]==['--raw','--'] and uid(args[5]), 'unexpected read arguments'
+elif kind==('attachment','list'):
+    assert len(args)==5 and mailbox(args[2]) and args[3]=='--' and uid(args[4]), 'unexpected attachment arguments'
+elif kind==('attachment','download'):
+    assert len(args)>=8 and mailbox(args[2]) and args[3]=='--dir' and args[5]=='--'
+    assert all(uid(value) for value in args[6:]), 'unexpected download arguments'
+else:
+    raise AssertionError('unexpected command')
 if kind==('imap','status'):
     countfile=pathlib.Path(os.environ['MAIL_TEST_CALLS']+'.status')
     count=int(countfile.read_text())+1 if countfile.exists() else 1
@@ -74,7 +95,7 @@ class MailFixture:
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='icloud-mail-test-')
         self.addCleanup(self.temp.cleanup)
-        self.directory = Path(self.temp.name)
+        self.directory = Path(self.temp.name).resolve()
         self.fake = self.directory / 'himalaya'
         self.fake.write_text(FAKE)
         self.fake.chmod(0o755)
@@ -95,6 +116,7 @@ imap.sasl.plain.password.command = ["never-executed-by-wrapper"]
         self.calls = self.directory / 'calls.jsonl'
         self.environment = dict(os.environ, MAIL_TEST_SCENARIO=str(self.scenario),
                                 MAIL_TEST_CALLS=str(self.calls),
+                                MAIL_TEST_CONFIG=str(self.backend_config),
                                 MAIL_TEST_STARTED=str(self.directory / 'started'),
                                 MAIL_TEST_ORPHAN=str(self.directory / 'orphan'))
 
@@ -129,6 +151,94 @@ imap.sasl.plain.password.command = ["never-executed-by-wrapper"]
 
 
 class MailAdapterTests(MailFixture, unittest.TestCase):
+    def test_backend_fixture_rejects_extra_flags_and_wrong_routing(self):
+        command = [str(self.fake), '--json', '--log-level', 'off', '--config', str(self.backend_config),
+                   '--account', 'icloud', '--backend', 'imap', 'message', 'read', '--mailbox=INBOX', '--raw', '--', '7']
+        for invalid in (command + ['--seen'], [value if value != 'imap' else 'smtp' for value in command],
+                        [value if value != str(self.backend_config) else '/wrong-config' for value in command]):
+            result = subprocess.run(invalid, capture_output=True, text=True, env=self.environment, timeout=5)
+            self.assertNotEqual(result.returncode, 0)
+
+    def test_all_read_operations_obey_the_strict_backend_contract(self):
+        for arguments in (('doctor',), ('mailboxes',), ('attachments', '--mailbox', 'INBOX', '7'),
+                          ('search', '--mailbox=--seen', '--query=subject invoice')):
+            with self.subTest(arguments=arguments):
+                result, data = self.run_cli(*arguments)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertTrue(data['success'])
+
+    def test_malformed_configuration_returns_structured_failure_before_backend_access(self):
+        original = self.config.read_text()
+        for invalid in ('mail = []', 'mail = "private-sentinel"',
+                        original.replace('state_dir = ' + json.dumps(str(self.state)), 'state_dir = 42'),
+                        original.replace('account = "icloud"', 'account = ' + json.dumps('\0')),
+                        original.replace('himalaya = ' + json.dumps(str(self.fake)), 'himalaya = ' + json.dumps('\0'))):
+            with self.subTest(invalid=invalid):
+                self.config.write_text(invalid)
+                result, data = self.run_cli('status')
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertEqual(data['error']['stage'], 'configuration')
+                self.assertNotIn('private-sentinel', result.stdout + result.stderr)
+                self.assertEqual(self.logged_commands(), [])
+
+    def test_malformed_account_tables_and_aliases_fail_without_tracebacks(self):
+        original = self.backend_config.read_text()
+        for invalid in ('accounts = []', '[accounts]\nicloud = []',
+                        original.replace('imap.sort.fallback = true', 'imap.sort = false'),
+                        original.replace('mailbox.alias.inbox = "INBOX"', 'mailbox.alias = []'),
+                        original.replace('mailbox.alias.inbox = "INBOX"', 'mailbox.alias.inbox = 42')):
+            with self.subTest(invalid=invalid):
+                self.backend_config.write_text(invalid)
+                result, data = self.run_cli('list', '--mailbox', 'inbox')
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertEqual(data['error']['stage'], 'configuration')
+                self.assertNotIn('Traceback', result.stderr)
+                self.assertEqual(self.logged_commands(), [])
+
+    def test_semantically_corrupt_ledgers_are_rejected_and_preserved(self):
+        self.read()
+        path = self.state / 'reviews.json'
+        original = json.loads(path.read_text())
+        key = next(iter(original['entries']))
+        changes = [('uid', '0'), ('uidValidity', 0), ('uidValidity', True), ('scope', 'bad'),
+                   ('contentSha256', 'bad'), ('token', 'bad'), ('mailbox', ''), ('account', ''),
+                   ('fetchedAt', 'yesterday'), ('reviewedAt', '2026-10-09T00:00:00+00:00'),
+                   ('outcome', 'clear'), ('note', []), ('due', '2026-02-30'), ('resolvedAt', True)]
+        invalid_ledgers = []
+        for field, value in changes:
+            data = json.loads(json.dumps(original))
+            data['entries'][key][field] = value
+            invalid_ledgers.append(data)
+        data = json.loads(json.dumps(original))
+        data['schemaVersion'] = True
+        invalid_ledgers.append(data)
+        data = json.loads(json.dumps(original))
+        data['entries']['wrong-key'] = data['entries'].pop(key)
+        invalid_ledgers.append(data)
+        data = json.loads(json.dumps(original))
+        extra = dict(data['entries'][key], uid='8')
+        import icloud_mail
+        data['entries'][icloud_mail.Ledger.key(extra['scope'], extra['mailbox'], extra['uidValidity'], extra['uid'])] = extra
+        invalid_ledgers.append(data)
+        for data in invalid_ledgers:
+            with self.subTest(data=data):
+                path.write_text(json.dumps(data))
+                before = path.read_bytes()
+                for arguments in (('review', 'status'), ('review', 'ack', 'unknown', '--outcome', 'clear')):
+                    result, report = self.run_cli(*arguments)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertEqual(report['error']['stage'], 'state')
+                    self.assertEqual(path.read_bytes(), before)
+
+    def test_review_dates_and_outcome_fields_are_validated_before_state_changes(self):
+        token = self.read()
+        before = (self.state / 'reviews.json').read_bytes()
+        for extra in (('--due', '20261201'), ('--due', '2026-02-30'), ('--due', ''), ('--note', '  ')):
+            result, data = self.run_cli('review', 'ack', token, '--outcome', 'clear', *extra)
+            self.assertEqual(result.returncode, 2, result.stdout)
+            self.assertEqual(data['error']['stage'], 'usage')
+            self.assertEqual((self.state / 'reviews.json').read_bytes(), before)
+
     def test_listing_does_not_review_and_read_requires_explicit_ack(self):
         listed, data = self.run_cli('list', '--mailbox', 'INBOX', '--page', '2', '--page-size', '1')
         self.assertEqual(listed.returncode, 0, listed.stdout)
@@ -220,6 +330,7 @@ class MailAdapterTests(MailFixture, unittest.TestCase):
     def test_mutations_sequences_and_arbitrary_backend_flags_are_rejected(self):
         cases = [('send',), ('read','--mailbox','INBOX','7','--seen'),
                  ('read','--mailbox','INBOX','1:*'),
+                 ('read','--mailbox','INBOX','9' * 5000),
                  ('list','--mailbox','INBOX','--page-size','101'),
                  ('download','--mailbox','INBOX','7','--part','3','--part','3','--target',str(self.directory/'new'))]
         for arguments in cases:
@@ -309,6 +420,82 @@ class MailAdapterTests(MailFixture, unittest.TestCase):
 
 
 class MailInstallationTests(MailFixture, unittest.TestCase):
+    def install(self, home, *arguments, checkout=ROOT):
+        result = subprocess.run([sys.executable, '-B', str(checkout / 'install_mail.py'), '--home', str(home),
+                                 *map(str, arguments)], capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def assert_local_links(self, paths):
+        for path in paths:
+            for target in re.findall(r'\[[^\]]*\]\(([^)]+)\)', path.read_text()):
+                if re.match(r'[a-zA-Z][a-zA-Z0-9+.-]*:', target):
+                    continue
+                filename = target.split('#', 1)[0]
+                self.assertTrue((path.parent / filename).is_file() if filename else path.is_file(),
+                                f'{path}: broken link {target}')
+
+    def test_custom_config_is_preserved_when_update_omits_config(self):
+        home = self.directory / 'home with spaces'
+        custom = self.directory / 'private routing' / "mail 'custom'.toml"
+        self.install(home, '--config', custom, '--himalaya', self.fake, '--himalaya-config', self.backend_config)
+        custom.write_text(custom.read_text().replace('timeout_seconds = 30', 'timeout_seconds = 11'))
+        before = custom.read_bytes()
+        installed = self.install(home)
+        self.assertEqual(installed['config'], str(custom))
+        self.assertEqual(custom.read_bytes(), before)
+        self.assertFalse((home / '.config/icloud-utils/mail.toml').exists())
+        result = subprocess.run([home / 'bin/icmail', '--json', 'status'], capture_output=True,
+                                text=True, env=self.environment, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)['data']['configuration'], str(custom))
+        other = self.directory / 'other.toml'
+        installed = self.install(home, '--config', other, '--himalaya', self.fake,
+                                 '--himalaya-config', self.backend_config)
+        self.assertEqual(installed['config'], str(other))
+        self.assertEqual(custom.read_bytes(), before)
+        self.assertEqual(self.install(home)['config'], str(other))
+
+    def test_missing_discovered_config_and_ambiguous_launcher_fail_before_update(self):
+        home = self.directory / 'home'
+        custom = self.directory / 'custom.toml'
+        installed = self.install(home, '--config', custom)
+        launcher = home / 'bin/icloud-mail'
+        before = launcher.read_bytes()
+        custom.unlink()
+        command = [sys.executable, '-B', str(ROOT / 'install_mail.py'), '--home', str(home)]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(launcher.read_bytes(), before)
+        self.assertFalse(custom.exists())
+        self.assertFalse((home / '.config/icloud-utils/mail.toml').exists())
+        launcher.write_text('#!/bin/sh\n# icloud-utils mail launcher\nexec false "$@"\n')
+        result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('--config', result.stderr)
+        self.assertEqual(len(list(Path(installed['migration']).parent.iterdir())), 1)
+
+    def test_documentation_is_complete_and_outlives_mail_runtime_and_checkout(self):
+        checkout = self.directory / 'checkout'
+        shutil.copytree(ROOT, checkout, ignore=shutil.ignore_patterns('.git', '__pycache__', '.DS_Store'))
+        home = self.directory / 'home'
+        skills = home / '.codex/skills'
+        installed = self.install(home, '--skills-dir', skills, '--himalaya', self.fake,
+                                 '--himalaya-config', self.backend_config, checkout=checkout)
+        checkout.rename(self.directory / 'removed-checkout')
+        result = subprocess.run([home / 'bin/icmail', '--json', 'status'], capture_output=True,
+                                text=True, env=self.environment, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        documentation = Path(json.loads(result.stdout)['data']['documentation'])
+        self.assertFalse(documentation.is_relative_to(Path(installed['runtime'])))
+        shutil.rmtree(installed['runtime'])
+        self.assertTrue(documentation.is_file())
+        self.assert_local_links(list(Path(installed['documentation']).rglob('*.md')) +
+                                [skills / name / 'SKILL.md' for name in ('icloud-utils', 'icloud-mail')])
+        self.assertTrue((skills / 'icloud-utils/references/RECOVERY.txt').is_file())
+        self.assertFalse((home / 'Library/LaunchAgents').exists())
+        self.assertFalse((home / 'Library/Application Support/icloud-backup').exists())
+
     def test_install_update_preserves_private_config_and_survives_checkout_move(self):
         checkout=self.directory/'checkout'
         shutil.copytree(ROOT,checkout,ignore=shutil.ignore_patterns('.git','__pycache__','.DS_Store'))
@@ -327,14 +514,14 @@ class MailInstallationTests(MailFixture, unittest.TestCase):
         self.assertEqual(self.backend_config.read_bytes(),backend_before)
         self.assertEqual(config.stat().st_mode&0o777,0o600)
         self.assertEqual(os.readlink(home/'bin/icmail'),'icloud-mail')
-        self.assertIn('references/mail.md',(skills/'icloud-mail/SKILL.md').read_text())
-        self.assertTrue((skills/'icloud-mail/references/mail.md').is_file())
+        self.assertIn('references/docs/mail.md',(skills/'icloud-mail/SKILL.md').read_text())
+        self.assertTrue((skills/'icloud-mail/references/docs/mail.md').is_file())
         checkout.rename(self.directory/'removed-checkout')
         result=subprocess.run([home/'bin/icmail','--json','status'],capture_output=True,text=True,env=self.environment,timeout=10)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
         self.assertFalse(json.loads(result.stdout)['data']['networkChecked'])
         self.assertEqual(self.logged_commands(),[])
-        self.assertTrue((skills/'icloud-utils/references/operations.md').is_file())
+        self.assertTrue((skills/'icloud-utils/references/docs/operations.md').is_file())
 
     def test_install_refuses_unrelated_alias_before_creating_runtime(self):
         home=self.directory/'home'; (home/'bin').mkdir(parents=True)

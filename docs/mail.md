@@ -30,7 +30,7 @@ The toolkit routing settings are:
 | `state_dir` | Absolute or `~/` path; default `~/Library/Application Support/icloud-utils/mail/state` |
 | `timeout_seconds` | Per-child deadline from 1 through 300; default 30 |
 
-The portable [routing example](https://github.com/brfid/icloud-utils/blob/main/example.mail.toml) contains no identity or credentials. Unknown toolkit settings are rejected rather than becoming an alternate password store. The adapter explicitly selects this account/configuration and the IMAP backend for every operation.
+The portable [routing example](../example.mail.toml) contains no identity or credentials. Unknown toolkit settings, invalid table shapes, control characters in routing, and malformed aliases are rejected rather than becoming an alternate password store. The adapter explicitly selects this account/configuration and the IMAP backend for every operation.
 
 ## Install and update
 
@@ -42,18 +42,20 @@ scripts/install-mail --himalaya /opt/homebrew/bin/himalaya --skills-dir "$HOME/.
 ~/bin/icmail --json doctor
 ```
 
-`--skills-dir` explicitly installs or updates the source-owned `icloud-mail` and `icloud-utils` skills. Omit it to install only commands and their documentation. Existing matching skills are retained in the private migration directory before replacement; unrelated skill names/contents are refused. Installed skill references point to the deployed documentation. Source links are rewritten by the installer, so neither commands nor instructions depend on the checkout remaining present.
+`--skills-dir` explicitly installs or updates the source-owned `icloud-mail` and `icloud-utils` skills. Omit it to install only commands and their documentation. Existing matching skills are retained in the private migration directory before replacement; unrelated skill names/contents are refused. Both skills reference a toolkit-owned documentation tree outside the mail runtime. It includes the linked portable examples and recovery guide, and survives removal of the mail runtime. Source links are rewritten by the installer, so neither commands nor instructions depend on the checkout remaining present.
 
-The installer creates a private toolkit configuration only if it is absent. For that first creation, `--account`, `--himalaya`, and `--himalaya-config` select existing account routing. An existing toolkit configuration is preserved, so edit that private file deliberately when changing routing. `--config` selects a custom toolkit file for both the installed launcher and future updates. The installer never reads or rewrites the Himalaya account file, exports a credential, changes backup configuration, reloads jobs, or creates a scheduler.
+The installer creates a private toolkit configuration only if it is absent. For that first creation, `--account`, `--himalaya`, and `--himalaya-config` select existing account routing. An existing toolkit configuration is validated and preserved, so edit that private file deliberately when changing routing. An explicit `--config` selects a toolkit file; otherwise an update preserves the path embedded in the managed launcher, including a custom path. Only a fresh installation defaults to `~/.config/icloud-utils/mail.toml`. A missing discovered file or unrecognized launcher format fails before replacement and requires restoration or an explicit `--config`. The installer never reads or rewrites the Himalaya account file, exports a credential, changes backup configuration, reloads jobs, or creates a scheduler.
 
 | Installed artifact | Purpose |
 | --- | --- |
 | `~/bin/icloud-mail` and relative alias `~/bin/icmail` | Stable launcher and shorthand |
-| `~/Library/Application Support/icloud-utils/mail/runtime/` | Generated adapter and documentation |
+| `~/Library/Application Support/icloud-utils/mail/runtime/` | Generated mail adapter only |
+| `~/Library/Application Support/icloud-utils/documentation/` | Toolkit documentation, linked examples, and recovery guide; independent of mail runtime |
+| `~/Library/Application Support/icloud-utils/migration/` | Previous toolkit documentation trees |
 | `~/Library/Application Support/icloud-utils/mail/state/` | Default private review ledger and lock |
 | `~/Library/Application Support/icloud-utils/mail/migration/` | Previous managed runtime, launchers, toolkit routing, and replaced skills |
 
-Code, documentation, and skills are updated from source. Review state and existing routing are preserved. Replacement/loading is not one transaction: a reported installation failure requires inspecting its private migration copy and rerunning with the same arguments. To roll back, install a retained known-good checkout while retaining the private routing and state. For removal, first stop any separately configured mail automation, then remove only the identified generated mail launcher/alias, runtime, and installed mail instructions. Keep credentials, private routing, and review history unless their deletion is explicitly intended. Backup and materializer installations are independent.
+Code, documentation, and skills are updated from source. Review state and existing routing are preserved. Replacement/loading is not one transaction: a reported installation failure requires inspecting its private migration copies and rerunning with the same arguments. To roll back, install a retained known-good checkout while retaining the private routing and state. For removal, first stop any separately configured mail automation, then remove only the identified generated mail launcher/alias, runtime, and installed `icloud-mail` instructions. Retain the `icloud-utils` skill and toolkit documentation for the other components. Keep credentials, private routing, and review history unless their deletion is explicitly intended. Backup and materializer installations are independent.
 
 ## Commands
 
@@ -61,7 +63,7 @@ Global `--json` and `--config PATH` go **before** the subcommand. JSON output is
 
 | Command | Effect |
 | --- | --- |
-| `icmail --json status` | Inspect local configuration, backend compatibility, deployed documentation path, and review state; no network |
+| `icmail --json status` | Inspect selected toolkit configuration path, backend compatibility, deployed documentation path, and review state; no network |
 | `icmail --json doctor` | Check IMAP connectivity/authentication; inspect the backend's `ok`, not just its exit code |
 | `icmail --json mailboxes` | List accessible mailboxes |
 | `icmail --json list --mailbox INBOX --page 1 --page-size 20` | One bounded envelope page |
@@ -84,7 +86,7 @@ The adapter constructs a fixed set of backend commands with argument arrays and 
 
 Fetching and review are distinct. A read stores metadata and a SHA-256 of the JSON raw-message string; it does not store the body or mark the message reviewed. That digest is an integrity check for the returned representation, not proof of exact original wire bytes or accurate interpretation. Receipt identity uses the IMAP server/login namespace, canonical mailbox, UIDVALIDITY, and UID. The namespace is hashed in private state; credentials are not included. [IMAP identity rules](https://www.rfc-editor.org/rfc/rfc9051.html#section-2.3.1.1) explain why UIDVALIDITY is needed. Mailbox epochs are checked around retrieval, and changed content under an existing identity is rejected.
 
-A `review ack` requires an actual fetched receipt and the current account namespace. It is the reviewer's explicit assertion that the message and necessary context were assessed. Repeated identical acknowledgment is idempotent; a conflicting outcome is rejected. Only `review resolve` closes an existing action. Listing or reading alone, failed retrieval, timeout, and authentication failure never acknowledge review. State directories must be owner-only; the adapter refuses wider permissions rather than changing an existing directory. Atomic private ledger replacement and an operation lock protect concurrent updates; a corrupt ledger is reported without being reset.
+A `review ack` requires an actual fetched receipt and the current account namespace. It is the reviewer's explicit assertion that the message and necessary context were assessed. Repeated identical acknowledgment is idempotent; a conflicting outcome is rejected. Only `review resolve` closes an existing action. Listing or reading alone, failed retrieval, timeout, and authentication failure never acknowledge review. State directories and ledger files must be owner-only; the adapter refuses wider permissions rather than changing existing paths. Atomic private ledger replacement and an operation lock protect concurrent updates. Validation checks ledger schema, identity keys, unique tokens, UID bounds, digests, timestamps with timezones, calendar deadlines, and consistent review outcomes. A corrupt or symlinked ledger is reported without being reset.
 
 Envelope pages annotate which individual identities have acknowledged reviews. Historical receipts stay separate when UIDVALIDITY changes. `scopeCoverageComplete` is always false: this first release provides per-message evidence and pending actions, not a complete-mailbox watermark. Recheck pending actions against current messages and relevant Sent context; disappearance from a listing is not evidence of resolution.
 

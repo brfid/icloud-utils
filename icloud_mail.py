@@ -43,8 +43,35 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=True).encode()).hexdigest()
 
 
+def label(value):
+    """Routing and identity labels cannot contain empty text or control bytes."""
+    return isinstance(value, str) and bool(value.strip()) and not re.search(r'[\x00-\x1f\x7f]', value)
+
+
+def calendar_date(value):
+    if not isinstance(value, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', value):
+        raise ValueError('use YYYY-MM-DD')
+    return dt.date.fromisoformat(value)
+
+
+def timestamp(value):
+    if not isinstance(value, str) or not re.match(r'^\d{4}-\d{2}-\d{2}T', value):
+        raise ValueError('use a timestamp with a timezone')
+    parsed = dt.datetime.fromisoformat(value)
+    if parsed.utcoffset() is None:
+        raise ValueError('use a timestamp with a timezone')
+    return parsed
+
+
+def documentation():
+    root = Path(__file__).resolve().parent
+    if (root / '.icloud-utils-mail').is_file():
+        root = root.parent.parent / 'documentation'
+    return root / 'docs/mail.md'
+
+
 def positive_uid(value):
-    if not re.fullmatch(r'[1-9][0-9]*', str(value)) or int(value) > 4294967295:
+    if not re.fullmatch(r'[1-9][0-9]{0,9}', str(value)) or int(value) > 4294967295:
         raise argparse.ArgumentTypeError('use a single positive IMAP UID or MIME part ID')
     return str(value)
 
@@ -70,44 +97,63 @@ class Config:
 
     @classmethod
     def load(cls, path):
-        path = Path(path).expanduser().resolve()
         try:
+            path = Path(path).expanduser().resolve()
             data = tomllib.loads(path.read_text())
-            if set(data) != {'mail'}:
+            if set(data) != {'mail'} or not isinstance(data['mail'], dict):
                 raise ValueError('only the [mail] table is supported')
             mail = data['mail']
             allowed = {'account', 'himalaya', 'himalaya_config', 'state_dir', 'timeout_seconds'}
             if set(mail) - allowed:
                 raise ValueError('unknown mail settings; credentials belong in Himalaya/Keychain')
             for key in ('account', 'himalaya_config'):
-                if not isinstance(mail.get(key), str) or not mail[key].strip():
-                    raise ValueError(f'{key} must be a nonempty string')
+                if not label(mail.get(key)):
+                    raise ValueError(f'{key} must be a nonempty string without control characters')
             binary = mail.get('himalaya', 'himalaya')
-            if not isinstance(binary, str) or not binary.strip():
+            if not label(binary):
                 raise ValueError('himalaya must name one executable, not a shell command')
             timeout = mail.get('timeout_seconds', 30)
             if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 1 <= timeout <= 300:
                 raise ValueError('timeout_seconds must be from 1 through 300')
+            state_value = mail.get('state_dir', '~/Library/Application Support/icloud-utils/mail/state')
+            if not label(state_value):
+                raise ValueError('state_dir must be a nonempty path string without control characters')
             backend_path = Path(mail['himalaya_config']).expanduser()
-            state = Path(mail.get('state_dir', '~/Library/Application Support/icloud-utils/mail/state')).expanduser()
+            state = Path(state_value).expanduser()
             if not backend_path.is_absolute() or not state.is_absolute():
                 raise ValueError('himalaya_config and state_dir must be absolute or start with ~/')
             return cls(path, mail['account'], binary, backend_path.resolve(), state.resolve(), float(timeout))
-        except (OSError, ValueError, TypeError) as error:
+        except tomllib.TOMLDecodeError:
+            raise Failure('configuration', f'Toolkit mail configuration at {path} is not valid TOML; its contents were withheld.') from None
+        except (OSError, ValueError, TypeError, RuntimeError) as error:
             raise Failure('configuration', f'Cannot load toolkit mail configuration at {path}: {error}') from None
 
     def account_settings(self):
         """Inspect routing/identity only; never execute or copy a credential command."""
         try:
             data = tomllib.loads(self.himalaya_config.read_text())
+            if not isinstance(data.get('accounts'), dict):
+                raise ValueError()
             account = data['accounts'][self.account]
+            if not isinstance(account, dict) or not isinstance(account.get('imap'), dict):
+                raise ValueError()
             imap = account['imap']
+            if not isinstance(imap.get('sasl'), dict) or not isinstance(imap['sasl'].get('plain'), dict):
+                raise ValueError()
             server = imap['server']
             username = imap['sasl']['plain']['username']
-            if not isinstance(server, str) or not isinstance(username, str) or not server or not username:
+            if not label(server) or not label(username):
                 raise ValueError('IMAP server and login must be nonempty strings')
-            if imap.get('sort', {}).get('fallback') is not True:
+            if not isinstance(imap.get('sort'), dict) or imap['sort'].get('fallback') is not True:
                 raise ValueError('iCloud requires imap.sort.fallback = true for reliable ordering')
+            mailboxes = account.get('mailbox', {})
+            if not isinstance(mailboxes, dict) or not isinstance(mailboxes.get('alias', {}), dict):
+                raise ValueError('mailbox aliases must be a table')
+            aliases = mailboxes.get('alias', {})
+            if any(not label(key) or not label(value) for key, value in aliases.items()):
+                raise ValueError('mailbox aliases must contain nonempty names')
+            if len({key.casefold() for key in aliases}) != len(aliases):
+                raise ValueError('mailbox aliases must be distinct ignoring case')
             return account
         except (OSError, KeyError, TypeError, ValueError):
             raise Failure('configuration', 'Himalaya must define the selected IMAP account, plain login, and local sort fallback; see docs/mail.md.') from None
@@ -118,11 +164,11 @@ class Config:
         return digest([imap['server'].casefold(), imap['sasl']['plain']['username'].casefold()])
 
     def mailbox(self, name):
-        if not name or any(char in name for char in '\0\r\n'):
+        if not label(name):
             raise Failure('usage', 'Use one nonempty mailbox name.')
         aliases = self.account_settings().get('mailbox', {}).get('alias', {})
         resolved = next((value for key, value in aliases.items() if key.casefold() == name.casefold()), name)
-        if not isinstance(resolved, str) or not resolved or any(char in resolved for char in '\0\r\n'):
+        if not label(resolved):
             raise Failure('configuration', 'The selected mailbox alias is invalid.')
         return 'INBOX' if resolved.casefold() == 'inbox' else resolved
 
@@ -200,23 +246,70 @@ class Ledger:
         self.path = directory / 'reviews.json'
 
     def load(self):
-        if not self.path.exists():
-            return {'schemaVersion': 1, 'entries': {}}
         try:
-            data = json.loads(self.path.read_text())
-            if data['schemaVersion'] != 1 or not isinstance(data['entries'], dict):
+            if self.directory.exists() and self.directory.stat().st_mode & 0o077:
                 raise ValueError()
+            if self.path.is_symlink():
+                raise ValueError()
+            if not self.path.exists():
+                return {'schemaVersion': 1, 'entries': {}}
+            if not self.path.is_file() or self.path.stat().st_mode & 0o077:
+                raise ValueError()
+            data = json.loads(self.path.read_text(), object_pairs_hook=self.unique_object)
+            if not isinstance(data, dict) or set(data) != {'schemaVersion', 'entries'}:
+                raise ValueError()
+            if type(data['schemaVersion']) is not int or data['schemaVersion'] != 1 or not isinstance(data['entries'], dict):
+                raise ValueError()
+            tokens = set()
             for key, entry in data['entries'].items():
                 required = {'token', 'scope', 'account', 'mailbox', 'uidValidity', 'uid', 'contentSha256', 'fetchedAt', 'reviewedAt', 'outcome', 'note', 'due', 'resolvedAt'}
                 if not isinstance(key, str) or not isinstance(entry, dict) or set(entry) != required:
                     raise ValueError()
-                if not all(isinstance(entry[field], str) for field in ('token', 'scope', 'account', 'mailbox', 'uid', 'contentSha256', 'fetchedAt')):
+                if not all(label(entry[field]) for field in ('account', 'mailbox', 'uid')):
                     raise ValueError()
-                if type(entry['uidValidity']) is not int or entry['outcome'] not in (None, 'clear', 'needs-attention'):
+                for field, length in (('scope', 64), ('contentSha256', 64), ('token', 32)):
+                    if not isinstance(entry[field], str) or not re.fullmatch(r'[0-9a-f]{' + str(length) + '}', entry[field]):
+                        raise ValueError()
+                if entry['token'] in tokens:
+                    raise ValueError()
+                tokens.add(entry['token'])
+                if type(entry['uidValidity']) is not int or not 0 < entry['uidValidity'] <= 4294967295:
+                    raise ValueError()
+                positive_uid(entry['uid'])
+                if key != self.key(entry['scope'], entry['mailbox'], entry['uidValidity'], entry['uid']):
+                    raise ValueError()
+                timestamp(entry['fetchedAt'])
+                for field in ('reviewedAt', 'resolvedAt'):
+                    if entry[field] is not None:
+                        timestamp(entry[field])
+                if entry['note'] is not None and (not isinstance(entry['note'], str) or not entry['note'].strip() or '\0' in entry['note']):
+                    raise ValueError()
+                if entry['due'] is not None:
+                    calendar_date(entry['due'])
+                if entry['outcome'] is None:
+                    if any(entry[field] is not None for field in ('reviewedAt', 'note', 'due', 'resolvedAt')):
+                        raise ValueError()
+                elif entry['outcome'] in ('clear', 'needs-attention'):
+                    if entry['reviewedAt'] is None:
+                        raise ValueError()
+                    if entry['outcome'] == 'clear' and entry['resolvedAt'] is not None:
+                        raise ValueError()
+                    if entry['outcome'] == 'needs-attention' and entry['note'] is None:
+                        raise ValueError()
+                else:
                     raise ValueError()
             return data
-        except (OSError, ValueError, KeyError, TypeError):
+        except (OSError, ValueError, KeyError, TypeError, argparse.ArgumentTypeError):
             raise Failure('state', 'The private review ledger is unreadable or incompatible; it was not reset.') from None
+
+    @staticmethod
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError('duplicate ledger field')
+            result[key] = value
+        return result
 
     @contextmanager
     def transaction(self):
@@ -297,11 +390,13 @@ def execute(args, config):
         if args.review_command == 'status':
             return ledger.status(scope)
         if args.review_command == 'ack':
+            if args.note is not None and (not args.note.strip() or '\0' in args.note):
+                raise Failure('usage', '--note must contain nonempty text without NUL characters.')
             if args.outcome == 'needs-attention' and not (args.note and args.note.strip()):
                 raise Failure('usage', 'A needs-attention acknowledgment requires --note with the concrete action.')
-            if args.due:
+            if args.due is not None:
                 try:
-                    dt.date.fromisoformat(args.due)
+                    calendar_date(args.due)
                 except ValueError:
                     raise Failure('usage', '--due must be an ISO calendar date (YYYY-MM-DD).') from None
             return {'receipt': ledger.update(scope, args.token, args.outcome, args.note, args.due)}
@@ -309,8 +404,9 @@ def execute(args, config):
     backend = Backend(config)
     if args.command == 'status':
         return {'account': config.account, 'himalayaVersion': backend.version,
+                'configuration': str(config.path),
                 'himalayaConfig': str(config.himalaya_config), 'stateDirectory': str(config.state_dir),
-                'documentation': str(Path(__file__).resolve().parent / 'docs/mail.md'),
+                'documentation': str(documentation()),
                 'networkChecked': False, **ledger.status(scope)}
     if args.command == 'doctor':
         report = backend.call(['account', 'check'])

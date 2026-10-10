@@ -28,7 +28,7 @@ The [mail decision](adr-004-mail.md) defines the optional Himalaya companion. [M
 | `icloud_backup.py`: `Config` / `load_config` | Validated private configuration and path boundaries | Installation layout to the installer |
 | `icloud_backup.py`: `App` | Backup lifecycle, completion state, local locks, engine guards, source health, and safe restore targets | Storage, snapshot selection, verification, and calendar retention to Restic |
 | `icloud_mail.py` | Bounded read-only mail commands, version/result checks, stable IMAP receipt identity, and atomic private review state | Protocols, MIME, attachment retrieval, and credentials to Himalaya |
-| `install_mail.py` | Independent mail runtime/shortcut, private routing creation, source-owned skill deployment, and private migration copies | Mail behavior to the deployed adapter; account configuration remains external |
+| `install_mail.py` | Independent mail runtime/shortcut, preserved routing selection, source-owned skill deployment, toolkit documentation tree, and private migration copies | Mail behavior to the deployed adapter; account configuration remains external |
 | `install.py` | Stable runtime/shortcut, generated launchd jobs, deployment metadata, migration copies, and recovery export | Backup execution to the installed runner |
 | `watch.py` | Independent supervision of `status --json` and fallback alerts | Health rules to the runner while it can run |
 | Restic | Content reuse, compression, internal repository format, snapshots, integrity checks, restore, and retention | Remote file synchronization to iCloud Drive |
@@ -41,6 +41,8 @@ The materializer has no global database or daemon. Its parent does not touch sup
 ## Intentional duplication and deployment boundaries
 
 The watchdog's small file-writing and notification fallback is intentional duplication. Importing it from the runner would prevent the watchdog from reporting a broken runner import. Tests exercise that failure boundary. The installer may import the source runner because it is a deployment tool, not an independent monitor.
+
+Toolkit documentation is installed under `icloud-utils/documentation/`, outside `mail/runtime/`. Both source-owned skills reference that complete tree, including portable examples and the independent recovery guide. Removing the optional mail runtime leaves toolkit guidance usable. Documentation is shared static material, not a dependency between component runtimes.
 
 The backup runner and materializer both set the same native I/O-policy family for different child-process relationships. The runner must set policy before spawning Restic; a standalone materializer process cannot set policy for that later sibling. Sharing this code across the Python and Swift runtimes would add coupling without removing the operational requirement.
 

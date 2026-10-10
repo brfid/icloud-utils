@@ -6,7 +6,7 @@ This file configures `icloud-backup` only. `icloud-materialize` has no persisten
 
 Mail uses separate private toolkit routing in `~/.config/icloud-utils/mail.toml`, with account identity and credentials owned by Himalaya and its credential provider. See [Mail setup and credentials](mail.md#setup-and-credentials) for that schema and the portable routing example.
 
-`load_config()` and `Config` in [icloud_backup.py](../icloud_backup.py) define the accepted schema and defaults. Unknown settings, wrong types, unsafe path overlaps, and invalid source names are rejected. Paths must be absolute or start with `~`; they are resolved before overlap checks. Relative paths are not interpreted against the checkout.
+`load_config()` and `Config` in [the source runner](https://github.com/brfid/icloud-utils/blob/main/icloud_backup.py) define the accepted schema and defaults. Unknown settings, wrong types, unsafe path overlaps, and invalid source names are rejected. Paths must be absolute or start with `~`; they are resolved before overlap checks. Relative paths are not interpreted against the checkout.
 
 ## Backup store and sources
 
