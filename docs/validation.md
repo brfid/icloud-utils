@@ -12,7 +12,15 @@ Run the combined suite from the checkout:
 make test
 ```
 
-Use `make test-mail`, `make test-backup`, or `make test-installers` for the corresponding focused checks. Each accepts `PYTHON=/absolute/path/to/a/Python-3.11-or-newer` when needed. Mail command, configuration, review-state, documentation, and installation tests have separate modules; disposable backend/account fixtures live in `tests/support/`. Backup and retention tests share their own temporary-store fixture without importing another test module. Shared installer tests cover candidate-interpreter failure/timeout fallback, collision refusal, atomic-publication failures, and command-alias argument/exit behavior. No installed runtime imports the source-only deployment helpers.
+Select focused checks as needed:
+
+| Command | Scope |
+| --- | --- |
+| `make test-mail` | Mail commands, configuration, review state, documentation, and installation; no Swift or Restic required |
+| `make test-backup` | Backup, backup installation, and retention; requires Restic |
+| `make test-installers` | Shared deployment helpers and disposable backup and mail installations; requires Restic |
+
+Each target accepts `PYTHON=/absolute/path/to/python3` to select Python 3.11 or later. Mail tests have separate modules for each responsibility and share disposable backend/account fixtures in `tests/support/`. Backup and retention tests share their own temporary-store fixture without importing another test module. Shared installer tests cover candidate-interpreter failure/timeout fallback, collision refusal, atomic-publication failures, and command-alias argument/exit behavior.
 
 Mail checks have been exercised on Python 3.11 and 3.14. A process sandbox can deny Foundation coordinated reads even for disposable local files; a native test failure in that environment needs comparison with the same tests in an ordinary authorized macOS environment. Do not weaken native-read checks to accommodate that restriction.
 
@@ -20,7 +28,7 @@ The backup tests use temporary data and real empty-password Restic repositories.
 
 Installation tests cover configuration selection, schedule wiring, command aliases, the watchdog's missing-runner path, and an installed runtime after its fixture checkout is removed. Materializer tests cover scope resolution, metadata inventory, complete reads with hashing off by default, optional hashing, bounded request-ahead order and limits, stability, timeouts, interruptions, special files, legacy placeholders, installers, and injected failures. Unsafe failure injection and request-order tracing are compiled only into debug builds.
 
-Mail coverage can run independently with `make test-mail`, without Swift or Restic. Disposable Himalaya processes enforce exact global routing/backend arguments and allowlisted command shapes, rejecting unexpected flags rather than silently ignoring them. Temporary account/routing files exercise explicit review acknowledgments, pending-action resolution, account and UIDVALIDITY isolation, mid-read identity changes, malformed configuration/table shapes, semantically corrupt state, failed authentication despite exit zero, withheld private error streams, timeout/signal child cleanup, attachment destinations/partial results, and owner-only state handling. Disposable installations cover custom configuration discovery across updates and deliberate overrides, missing or ambiguous routing, preservation of private files, and commands/documentation after moving the fixture checkout. Toolkit documentation links remain usable after removing the mail runtime.
+Disposable Himalaya processes enforce exact global routing/backend arguments and allowlisted command shapes, rejecting unexpected flags rather than silently ignoring them. Temporary account/routing files exercise explicit review acknowledgments, pending-action resolution, account and UIDVALIDITY isolation, mid-read identity changes, malformed configuration/table shapes, semantically corrupt state, failed authentication despite exit zero, withheld private error streams, timeout/signal child cleanup, attachment destinations/partial results, and owner-only state handling. Disposable installations cover custom configuration discovery across updates and deliberate overrides, missing or ambiguous routing, preservation of private files, and commands/documentation after moving the fixture checkout. Toolkit documentation links remain usable after removing the mail runtime.
 
 The source-owned mail and toolkit skills also pass the skill validator. Regression tests parse both portable configuration examples through the adapter without invoking credentials, and check local links and anchors in source and deployed documentation. The mail adapter is tested against the explicitly supported Himalaya 2.1.0 JSON/CLI contract; fake-process tests alone do not establish server behavior.
 

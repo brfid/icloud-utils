@@ -1,6 +1,6 @@
 # Working on iCloud Utils
 
-Read [README.md](README.md), then the relevant document in its ownership table. Keep each procedure or explanation in its owner and link to it elsewhere. Python and Swift documentation comments describe responsibilities, invariants, and side effects; they do not repeat the operating manual. Use soft-wrapped Markdown.
+Read [README.md](README.md), then the relevant document in its ownership table. Keep each procedure or explanation in its owner and link to it elsewhere. Follow the [Google developer documentation style guide](https://developers.google.com/style). Python and Swift documentation comments describe responsibilities, invariants, and side effects; they do not repeat the operating manual. Use soft-wrapped Markdown.
 
 ## Git checkpoints and project records
 

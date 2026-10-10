@@ -18,11 +18,10 @@ The commands share source and documentation, not a runtime. The Swift materializ
 | Create a backup installation | [Create a new backup installation](#create-a-new-backup-installation) |
 | Find or update an existing installation | [Operations](docs/operations.md) |
 | Configure backup sources, exclusions, retention, or runtime limits | [Backup configuration](docs/configuration.md) and [example.config.toml](example.config.toml) |
-| Configure a first Himalaya account, credentials, or toolkit routing | [Mail setup and credential ownership](docs/mail.md#setup-and-credentials), [Himalaya example](example.himalaya.toml), and [routing example](example.mail.toml) |
+| Configure, install, or use the mail companion | [Mail setup, commands, and review contract](docs/mail.md) |
 | Restore without this installation | [RECOVERY.txt](RECOVERY.txt) |
 | Diagnose a failure | [Troubleshooting](docs/troubleshooting.md) |
 | Understand the design and guarantees | [Architecture](docs/architecture.md), [storage decision](docs/adr-001-storage.md), [materializer decision](docs/adr-002-materializer.md), [request-ahead decision](docs/adr-003-download-ahead.md), and [mail decision](docs/adr-004-mail.md) |
-| Install or use Himalaya mail tooling | [Mail setup, commands, and review contract](docs/mail.md) |
 | Review test coverage or release readiness | [Validation](docs/validation.md) |
 | Change the project as a coding agent | [AGENTS.md](AGENTS.md) |
 
@@ -44,16 +43,9 @@ icback materialize fetch --verbose -- /explicit/path
 
 Read the [materializer contract](docs/materializer.md) before treating a result as evidence of readability or synchronization.
 
-## Install the mail companion
+## Use the mail companion
 
-```sh
-scripts/install-mail --himalaya "$(command -v himalaya)" --skills-dir "$HOME/.codex/skills"
-~/bin/icmail --json status
-~/bin/icmail --json doctor
-~/bin/icmail --json list --mailbox INBOX --page-size 20
-```
-
-First configure and verify a Himalaya 2.1.0 IMAP account using [Mail setup](docs/mail.md#setup-and-credentials), or retain an existing working account. Account identity and credentials remain in its private configuration and credential provider. The installer creates only toolkit routing when absent and can deploy the repository-owned mail and toolkit skills. [Mail](docs/mail.md) owns permissions, troubleshooting, migration, safe reads, and explicit review acknowledgments.
+For a first account, follow [Mail setup](docs/mail.md#setup-and-credentials), then [Install and update](docs/mail.md#install-and-update) for stable commands and optional agent skills. You can also run the adapter directly from the checkout. For an existing installation, start with [Migration and rollback](docs/mail.md#migration-and-rollback). Account identity and credentials remain in Himalaya's private configuration and credential provider.
 
 ## Create a new backup installation
 
@@ -74,6 +66,6 @@ Installation copies the backup programs to stable locations, installs `icloud-ba
 
 ## Develop and verify
 
-`make test` builds the Swift command and runs disposable materializer, backup, retention, wrapper, alias, mail-adapter, review-state, and installation tests. `make test-mail` runs the isolated mail suite without Swift or Restic; `make test-backup` and `make test-installers` select backup or deployment checks. Set `PYTHON=/path/to/python3.11-or-newer` when the default `python3` is unsuitable. Release and platform limits are recorded in [Validation](docs/validation.md). No private configuration, backup store, archive data, machine logs, or generated build caches belong in this repository.
+Run `make test` from the checkout. [Validation](docs/validation.md) owns focused test commands, dependencies, coverage, and release limits. Keep private configuration, backup stores, archive data, machine logs, and generated build caches outside this repository.
 
 The project is [MIT licensed](LICENSE).

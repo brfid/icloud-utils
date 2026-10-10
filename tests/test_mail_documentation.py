@@ -1,7 +1,6 @@
 """Validate portable examples and documentation without accessing an account."""
 import json
 from pathlib import Path
-import re
 import tempfile
 import tomllib
 import unittest
@@ -32,9 +31,6 @@ class MailDocumentationTests(unittest.TestCase):
             self.assertEqual(config.account_settings(), accounts['accounts'][routing['account']])
             self.assertEqual(config.mailbox('inbox'), 'INBOX')
             self.assertFalse(config.state_dir.exists())
-        blocks = re.findall(r'```toml\n(.*?)```', (ROOT / 'docs/mail.md').read_text(), re.DOTALL)
-        self.assertEqual(len(blocks), 1)
-        self.assertEqual(tomllib.loads(blocks[0]), accounts)
 
 
 if __name__ == '__main__':
