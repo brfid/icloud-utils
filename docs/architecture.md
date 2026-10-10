@@ -2,13 +2,23 @@
 
 The toolkit keeps backup storage, arbitrary-path materialization, mail access/review tracking, installation, and health reporting as separate responsibilities. Sharing a repository does not make the commands dependencies of each other.
 
-The [storage decision](decisions/adr-001-storage.md), [materializer decision](decisions/adr-002-materializer.md), and [request-ahead decision](decisions/adr-003-download-ahead.md) record why the major choices were made. This document owns current component boundaries and integrity guarantees. [Operations](operations.md) owns procedures, while [Validation](validation.md) owns test coverage and release readiness.
+This guide explains component boundaries and integrity guarantees. For procedures, use [Operations](operations.md) or [Mail](mail.md); for test coverage and release limits, use [Validation](validation.md).
 
-The [mail decision](decisions/adr-004-mail.md) defines the optional Himalaya companion. [Mail](mail.md) owns its configuration, operations, read-only command surface, and local review contract.
+The [storage decision](decisions/adr-001-storage.md), [materializer decision](decisions/adr-002-materializer.md), [request-ahead decision](decisions/adr-003-download-ahead.md), and [mail decision](decisions/adr-004-mail.md) record the rationale for the major choices.
 
 ## Source layout
 
-`python/` contains the standalone Python programs and source-only installers; `Sources/` contains the Swift targets. `scripts/` provides the installer entry points, and `examples/` holds portable configuration templates. Current operating guides live directly under `docs/`, with design decisions under `docs/decisions/`. `skills/` owns agent instructions, while `tests/` and `tests/support/` contain the disposable checks and their fixtures. These source directories do not change the installed paths or introduce runtime dependencies between components.
+| Directory | Contents |
+| --- | --- |
+| `python/` | Standalone Python programs and source-only installers |
+| `Sources/` | Swift targets |
+| `scripts/` | Installer entry points |
+| `examples/` | Portable configuration templates |
+| `docs/` | Current operating guides; design decisions are under `docs/decisions/` |
+| `skills/` | Source-owned agent instructions |
+| `tests/` | Disposable checks and shared fixtures under `tests/support/` |
+
+Source organization does not change installed paths or introduce runtime dependencies between components.
 
 ## Design rules
 
@@ -41,7 +51,7 @@ The [mail decision](decisions/adr-004-mail.md) defines the optional Himalaya com
 
 The materializer and backup runner are separate installed programs. `icloud-backup materialize ...` performs an early compatibility check and replaces itself with the known `~/bin/icloud-materialize` companion before loading backup configuration or constructing `App`. A missing companion affects only that explicit subcommand. The JSON schema is owned by [the materializer contract](materializer.md#json-schema-10).
 
-The materializer has no global database or daemon. Its parent does not touch supplied paths; a resolution worker and one worker per deduplicated root perform potentially blocking filesystem operations. The parent runs root workers one at a time. Within a fetch worker, request scheduling can hold a bounded window of per-file iCloud requests while complete coordinated reads remain serial. The verification module owns native requests, space checks, and reads; worker operations owns window scheduling and result aggregation. Parent deadlines and interrupts bound waiting, followed by bounded TERM/KILL reaping. Worker process exit ends its process-local I/O policy even when cleanup cannot run. A timeout cannot revoke requests already handed to an iCloud daemon; see the [materializer contract](materializer.md#verification-mechanics) for the bound.
+The materializer has no global database or daemon. Its parent supervises deadlines and workers without touching supplied paths; resolution and per-root workers perform filesystem operations. Worker process exit contains the process-local I/O policy. Request scheduling, complete-read mechanics, and the limits of cancellation belong to the [materializer contract](materializer.md#verification-mechanics).
 
 ## Intentional duplication and deployment boundaries
 

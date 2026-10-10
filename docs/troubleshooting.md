@@ -6,15 +6,9 @@ Start with the installed component:
 | --- | --- | --- |
 | Backup | `~/bin/icback status --json` | [Installation discovery](operations.md#identify-the-active-installation) and the backup cases below |
 | Materializer | `~/bin/icmat --version`, then inspect the result for the explicitly requested paths | [Options, statuses, and incomplete results](materializer.md#options-and-statuses) |
-| Mail | `~/bin/icmail --json status` for offline setup, then `~/bin/icmail --json doctor` for IMAP connectivity/authentication | [Mail troubleshooting](mail.md#troubleshooting), [first-time setup](mail.md#setup-and-credentials), and [migration](mail.md#migration-and-rollback) |
+| Mail | `~/bin/icmail --json status` for offline setup, then `~/bin/icmail --json doctor` for IMAP connectivity/authentication | [Mail troubleshooting](mail.md#troubleshooting) |
 
-The remaining cases concern the backup installation. Its status command is:
-
-```sh
-~/bin/icloud-backup status --json
-```
-
-That result identifies the active configuration, installed runner, Python interpreter, job labels, and current problems. Follow [Operations](operations.md#identify-the-active-installation) if status itself cannot run. Preserve the private configuration and Restic store while diagnosing; do not initialize a replacement store.
+The remaining cases concern backup. Its status result identifies the active configuration, installed runner, Python interpreter, job labels, and current problems. If status cannot run, use the installation discovery procedure linked in the table. Preserve the private configuration and Restic store while diagnosing; do not initialize a replacement store.
 
 ## Cloud-only reads fail
 

@@ -2,6 +2,14 @@
 
 `icloud-mail` (`icmail`) is an optional companion that requires Python 3.11 or later. It supports Himalaya **2.1.0 and 2.2.1** for IMAP, message parsing, and authentication. Other releases require contract verification before use. It needs neither Restic nor the Swift materializer and creates no scheduled jobs. Terminal users and agents use the same command contract.
 
+| Task | Start with |
+| --- | --- |
+| Configure a first account | [Setup and credentials](#setup-and-credentials) |
+| Update an existing installation or account | [Migration and rollback](#migration-and-rollback) |
+| Install commands and optional agent skills | [Install and update](#install-and-update) |
+| Read mail or track completed reviews | [Commands](#commands) |
+| Diagnose a failure | [Troubleshooting](#troubleshooting) |
+
 ## Setup and credentials
 
 There are three separate owners:
@@ -130,7 +138,7 @@ The portable [routing example](../examples/mail.toml) contains no identity or cr
 
 ## Install and update
 
-Installation provides stable `~/bin/` commands and optional agent skills that work after the checkout moves. To run without installation, create private routing from the [routing example](../examples/mail.toml), then use `python3 -B python/icloud_mail.py --config /absolute/path/to/mail.toml --json status` from the checkout.
+Installation provides stable `~/bin/` commands and optional agent skills that work after the checkout moves.
 
 For an existing installation, follow [Migration and rollback](#migration-and-rollback) to preserve its selected paths. For a new installation, run from the source checkout:
 
@@ -156,6 +164,14 @@ The installer creates a private toolkit configuration only if it is absent. For 
 | `~/Library/Application Support/icloud-utils/migration/` | Previous toolkit documentation trees |
 | `~/Library/Application Support/icloud-utils/mail/state/` | Default private review ledger and lock |
 | `~/Library/Application Support/icloud-utils/mail/migration/` | Previous managed runtime, launchers, toolkit routing, and replaced skills |
+
+### Run from the checkout
+
+If you prefer to run without installation, create private routing as described in [Toolkit routing reference](#toolkit-routing-reference), then inspect it from the checkout:
+
+```sh
+python3 -B python/icloud_mail.py --config /absolute/path/to/mail.toml --json status
+```
 
 ### Remove the mail companion
 

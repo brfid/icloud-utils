@@ -1,10 +1,12 @@
 # Operations
 
-Use this document for installation discovery and the backup and materializer operating procedures. [Mail](mail.md) owns mail installation, commands, external credentials, and private review state. The backup configuration schema belongs to [configuration](configuration.md); materializer behavior belongs to [materializer](materializer.md); component mechanics belong to [architecture](architecture.md). Machine-specific status belongs in the private installation, not in repository documentation.
+Identify installed components and manage backup and materializer installations here. [Mail operations](mail.md) cover mail installation, credentials, commands, and review state. Keep machine-specific status in the private installation.
 
 | Task | Go to |
 | --- | --- |
 | Identify installed tools, configuration, and backup job labels | [Identify the active installation](#identify-the-active-installation) |
+| Create a backup installation and its first store | [Create a new backup installation](#create-a-new-backup-installation) |
+| Select a supported Python executable | [Select Python for installation](#select-python-for-installation) |
 | Update an installed backup without creating another store or job pair | [Update an existing backup installation](#update-an-existing-backup-installation) |
 | Install, update, roll back, or remove the materializer | [Install or remove the materializer](#install-or-remove-the-materializer) |
 | Install/update mail tooling and agent guidance, or inspect credentials/review state ownership | [Mail operations](mail.md#install-and-update) |
@@ -60,16 +62,40 @@ PYTHON=/absolute/path/to/python3 scripts/install-backup --help
 
 The same override works with the mail installer and the Python test targets described in [Validation](validation.md#automated-coverage).
 
+## Create a new backup installation
+
+Use this procedure only for a new backup store. For an existing store, follow [Update an existing backup installation](#update-an-existing-backup-installation) or [Connect, migration, and stopping](#connect-migration-and-stopping).
+
+Backups use Restic's **empty-password mode**. There is no separate recovery secret; anyone with the complete store can recover its contents. Privacy depends on Mac and iCloud access controls. Backup success establishes local creation and checking, not completed iCloud upload.
+
+You need macOS with iCloud Drive signed in, Python 3.11 or later, and Restic 0.19.1 or later. Homebrew can supply the dependencies with `brew install python restic`. If `python3` selects an older interpreter, [select a supported executable](#select-python-for-installation) first.
+
+1. Copy [the backup template](../examples/backup.toml) to `~/.config/icloud_backup/config.toml`, replace its example sources, and keep that private file outside Git. [Backup configuration](configuration.md) defines the settings.
+2. From the checkout, initialize and install the new store:
+
+   ```sh
+   scripts/install-backup --initialize
+   ```
+
+3. Check the installed command and first-run status:
+
+   ```sh
+   ~/bin/icloud-backup status
+   ```
+
+Installation copies the backup programs to stable locations, installs `icloud-backup` and `icback`, and loads the daily job and independent watchdog. The installed commands do not depend on this checkout. [Schedule and alerts](#schedule-and-alerts) describes subsequent runs.
+
 ## Update an existing backup installation
 
-1. Discover the active configuration and base label as above. Check for an active operation before deployment; installation unloads the selected jobs and may interrupt one.
+1. [Identify the active configuration and base label](#identify-the-active-installation). Check for an active operation before deployment; installation unloads the selected jobs and may interrupt one.
 2. Edit and validate the source checkout. An ordinary Markdown edit does not require deployment. Changes to installed Python files or `RECOVERY.txt` need installation to reach their copies.
-3. From the checkout, run the following with the discovered values:
+3. From the checkout, update the installation with the discovered values:
 
-```sh
-scripts/install-backup --config /absolute/path/to/config.toml --label BASE_LABEL
-~/bin/icloud-backup status
-```
+   ```sh
+   scripts/install-backup --config /absolute/path/to/config.toml --label BASE_LABEL
+   ```
+
+4. Check the installed command with `~/bin/icloud-backup status`.
 
 Do not add `--initialize` for an ordinary update. It is for registering a new backup store. Preserve a custom base label: the default `local.icloud-backup` is not an alias for an existing differently named pair, and choosing another label would add another pair of jobs. The installer deliberately re-enables the selected labels if a previous `launchctl disable` remains in effect.
 

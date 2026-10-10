@@ -37,6 +37,8 @@ Hidden files, packages, nested directories, and empty files are included. Mount 
 
 ## Verification mechanics
 
+The parent runs root workers one at a time. On a worker timeout, command deadline, or interrupt, it attempts to stop and reap the active worker with bounded TERM/KILL cleanup intervals.
+
 Fetch requests downloads with Foundation's per-file `startDownloadingUbiquitousItem`, then coordinates each native read with `NSFileCoordinator` and `.withoutChanges`. Within each root, up to `--download-ahead` successfully requested files can await verification. Reads remain serial in deterministic inventory order; after a requested file's read attempt finishes, the window is replenished. A value of `1` keeps request-then-read ordering. This gives iCloud an opportunity to overlap downloads; Apple does not guarantee parallel transfers. Mostly-local trees and single large files may see little or no benefit. The [request-ahead decision](decisions/adr-003-download-ahead.md) explains the alternatives.
 
 The read validates the URL supplied to the accessor and performs the complete fixed-buffer read inside that accessor. With `--sha256`, every digest is computed during that same read.

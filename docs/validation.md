@@ -6,7 +6,7 @@ This document owns automated coverage, real-iCloud acceptance conditions, the te
 
 ## Automated coverage
 
-Run the combined suite from the checkout:
+The combined suite requires Python 3.11 or later, Restic, and Apple Swift with a compatible macOS SDK. It uses disposable files and stores, not production configuration or credentials. Run it from the checkout:
 
 ```sh
 make test
@@ -21,7 +21,11 @@ Select focused checks as needed:
 | `make test-installers` | Shared deployment helpers and disposable backup and mail installations; requires Restic |
 | `make test-materializer` | Builds and checks the native CLI using disposable local files; requires Swift and Python, with no Restic or Himalaya dependency |
 
-Each target accepts `PYTHON=/absolute/path/to/python3` to select Python 3.11 or later and fails early for older interpreters. The installers use [the same selection override](operations.md#select-python-for-installation). Mail tests have separate modules for each responsibility and share disposable backend/account fixtures in `tests/support/`. Backup and retention tests share their own temporary-store fixture without importing another test module. Shared installer tests cover invoking-interpreter preference, candidate failure/timeout fallback, old-version rejection, exact entry-point argument/exit forwarding, collision refusal, and atomic-publication failures.
+Each target accepts `PYTHON=/absolute/path/to/python3` and fails early for older interpreters. The installers use [the same selection override](operations.md#select-python-for-installation). For SDK selection and build directories, use [Build and test](materializer.md#build-and-test).
+
+### Coverage and limits
+
+Mail, backup, and retention tests share disposable fixtures from `tests/support/` without importing another test module. Shared installer tests cover invoking-interpreter preference, candidate failure/timeout fallback, old-version rejection, exact entry-point argument/exit forwarding, collision refusal, and atomic-publication failures.
 
 Mail checks have been exercised on Python 3.11 and 3.14. A process sandbox can deny Foundation coordinated reads even for disposable local files; a native test failure in that environment needs comparison with the same tests in an ordinary authorized macOS environment. Do not weaken native-read checks to accommodate that restriction.
 
@@ -57,7 +61,13 @@ This establishes the exercised account and command paths, not exhaustive mailbox
 
 ## Tested platform boundary
 
-The initial materializer implementation was compiled and run on Apple silicon (`arm64`) macOS 26.6.2 with Apple Swift 6.4 and the installed macOS 26.5 SDK. Version 1.1.0 was built and exercised on Apple silicon macOS 27.0 with Apple Swift 6.4 and the same SDK. The package declares macOS 13 as its deployment target, but macOS 13–15 runtime behavior and Intel hardware remain untested.
+| Check | Platform | Toolchain |
+| --- | --- | --- |
+| Initial materializer | Apple silicon (`arm64`), macOS 26.6.2 | Apple Swift 6.4, macOS 26.5 SDK |
+| Materializer 1.1.0 | Apple silicon, macOS 27.0 | Apple Swift 6.4, macOS 26.5 SDK |
+| Disposable CLI regression suite | Apple silicon, macOS 27.0.1 | Apple Swift 6.4, discovered macOS 27.0 SDK |
+
+The disposable CLI checks establish build and local-file behavior; the real-iCloud acceptance above remains the evidence for hydration. The package declares macOS 13 as its deployment target, but macOS 13–15 runtime behavior and Intel hardware remain untested.
 
 A fixture that never reaches uploaded/current state or never becomes data-less is inconclusive. In particular, local package traversal is covered automatically, but a package-contained real iCloud file did not become eligible for the initial native-eviction test within its bounded wait.
 

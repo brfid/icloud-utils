@@ -46,7 +46,7 @@ Removing a source from configuration stops new captures. Existing managed histor
 | `runtime.cache_dir` | `~/Library/Caches/icloud-backup/restic` | Disposable local Restic metadata cache |
 | `runtime.flag_path` | `~/Desktop/⚠️ BACKUP FAILING.txt` | Visible failure/staleness warning |
 
-The scheduled times and job names are deployment settings described in [operations](operations.md#schedule-and-alerts), not TOML retention or runtime settings. There is no password setting: all engine calls use the empty-password mode described in the README.
+The scheduled times and job names are deployment settings described in [operations](operations.md#schedule-and-alerts), not TOML retention or runtime settings. There is no password setting: all engine calls use the [empty-password mode described in backup setup](operations.md#create-a-new-backup-installation).
 
 ## Changes and precedence
 
