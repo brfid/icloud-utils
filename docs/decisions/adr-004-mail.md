@@ -16,13 +16,13 @@ The adapter exposes bounded listing/search, full reads preserving seen state, se
 
 Keep retrieval separate from review. Store per-message metadata receipts using an account namespace, canonical mailbox, UIDVALIDITY, and UID. Acknowledge only through an explicit reviewer operation; retain unreviewed receipts and unresolved actions. Do not claim complete mailbox coverage or introduce an arrival watermark based on author-supplied dates. This conservative per-message contract avoids falsely completing a partial review.
 
-Own portable mail instructions in [Mail](mail.md) and the repository's mail/toolkit skills. Deploy generated skills and documentation through the independent installer. Keep installed programs usable without the checkout, and keep mail configuration/state/dependencies independent of backup and materializer jobs. Existing schedulers remain private and are not recreated by installation. AI review is optional.
+Own portable mail instructions in [Mail](../mail.md) and the repository's mail/toolkit skills. Deploy generated skills and documentation through the independent installer. Keep installed programs usable without the checkout, and keep mail configuration/state/dependencies independent of backup and materializer jobs. Existing schedulers remain private and are not recreated by installation. AI review is optional.
 
 ## Options and consequences
 
 A separate global skill requires less project code but leaves workflow ownership outside the toolkit. A thin companion provides consistent discovery, setup, diagnostics, and review evidence with a small adapter to maintain. Bundling/forking Himalaya or merging mail into the backup runner adds upstream maintenance and couples unrelated failure paths. Use the thin companion.
 
-Himalaya upgrades require contract testing before widening the supported version. Private routing, bodies, attachments, review notes, credential material, and machine inventories stay outside Git. Installation preserves existing routing and working authentication rather than creating another credential store. [Validation](validation.md) owns tested behavior and acceptance limits.
+Himalaya upgrades require contract testing before widening the supported version. Private routing, bodies, attachments, review notes, credential material, and machine inventories stay outside Git. Installation preserves existing routing and working authentication rather than creating another credential store. [Validation](../validation.md) owns tested behavior and acceptance limits.
 
 ## Evidence
 

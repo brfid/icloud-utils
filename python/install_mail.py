@@ -19,7 +19,7 @@ from icloud_mail import Config, Failure
 from installer_support import atomic_text, install_alias, stable_python, validate_alias
 
 MARKER = '# icloud-utils mail launcher'
-DOCUMENTATION_FILES = ('README.md', 'AGENTS.md', 'RECOVERY.txt', 'LICENSE', 'example.config.toml', 'example.mail.toml', 'example.himalaya.toml')
+DOCUMENTATION_FILES = ('README.md', 'AGENTS.md', 'RECOVERY.txt', 'LICENSE')
 
 
 def selected_config(home, canonical, runtime, explicit):
@@ -46,7 +46,7 @@ def selected_config(home, canonical, runtime, explicit):
 
 
 def install(home, config=None, skills_dir=None, himalaya='himalaya', himalaya_config=None, account='icloud'):
-    source = Path(__file__).resolve().parent
+    source = Path(__file__).resolve().parent.parent
     toolkit = home / 'Library/Application Support/icloud-utils'
     support = toolkit / 'mail'
     documentation = toolkit / 'documentation'
@@ -93,8 +93,9 @@ def install(home, config=None, skills_dir=None, himalaya='himalaya', himalaya_co
     staging = Path(tempfile.mkdtemp(prefix='.install-', dir=support))
     doc_staging = Path(tempfile.mkdtemp(prefix='.documentation-', dir=toolkit))
     try:
-        shutil.copy2(source / 'icloud_mail.py', staging / 'icloud_mail.py')
+        shutil.copy2(source / 'python/icloud_mail.py', staging / 'icloud_mail.py')
         shutil.copytree(source / 'docs', doc_staging / 'docs')
+        shutil.copytree(source / 'examples', doc_staging / 'examples')
         for filename in DOCUMENTATION_FILES:
             shutil.copy2(source / filename, doc_staging / filename)
         (doc_staging / '.icloud-utils-documentation').write_text('Toolkit documentation managed by install_mail.py\n')

@@ -47,7 +47,7 @@ imap.sasl.plain.password.command = ["never-executed-by-wrapper"]
         self.scenario.write_text(json.dumps(settings))
 
     def command(self, *arguments):
-        return [sys.executable, '-B', str(ROOT / 'icloud_mail.py'), '--config', str(self.config), '--json', *arguments]
+        return [sys.executable, '-B', str(ROOT / 'python/icloud_mail.py'), '--config', str(self.config), '--json', *arguments]
 
     def run_cli(self, *arguments):
         result = subprocess.run(self.command(*arguments), capture_output=True, text=True,

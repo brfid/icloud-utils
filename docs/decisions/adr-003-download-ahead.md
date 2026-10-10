@@ -10,7 +10,7 @@ Serial request-then-read fetch can wait for each cloud-only file before asking i
 
 ## Decision
 
-Use a configurable per-root window of 1 through 16 explicit per-file requests. Request candidates from a complete inventory, keep at most that many successful requests awaiting verification, and replenish after each requested read attempt. Keep reads in inventory order and root workers serial. Retain whole-root and per-request free-space checks and require a stable final inventory. The released default is `4`: three cold real-iCloud fixture pairs showed a 71.5% median wall-time reduction from `1`, with all contents verified. [Validation](validation.md#real-icloud-acceptance) owns the measurements.
+Use a configurable per-root window of 1 through 16 explicit per-file requests. Request candidates from a complete inventory, keep at most that many successful requests awaiting verification, and replenish after each requested read attempt. Keep reads in inventory order and root workers serial. Retain whole-root and per-request free-space checks and require a stable final inventory. The released default is `4`: three cold real-iCloud fixture pairs showed a 71.5% median wall-time reduction from `1`, with all contents verified. [Validation](../validation.md#real-icloud-acceptance) owns the measurements.
 
 ## Alternatives and consequences
 

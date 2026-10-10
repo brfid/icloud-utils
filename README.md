@@ -17,11 +17,11 @@ The commands share source and documentation, not a runtime. The Swift materializ
 | Check or materialize one explicit path | [The examples below](#check-or-materialize-an-explicit-path), then the [materializer contract](docs/materializer.md) |
 | Create a backup installation | [Create a new backup installation](#create-a-new-backup-installation) |
 | Find or update an existing installation | [Operations](docs/operations.md) |
-| Configure backup sources, exclusions, retention, or runtime limits | [Backup configuration](docs/configuration.md) and [example.config.toml](example.config.toml) |
+| Configure backup sources, exclusions, retention, or runtime limits | [Backup configuration](docs/configuration.md) and [examples/backup.toml](examples/backup.toml) |
 | Configure, install, or use the mail companion | [Mail setup, commands, and review contract](docs/mail.md) |
 | Restore without this installation | [RECOVERY.txt](RECOVERY.txt) |
 | Diagnose a failure | [Troubleshooting](docs/troubleshooting.md) |
-| Understand the design and guarantees | [Architecture](docs/architecture.md), [storage decision](docs/adr-001-storage.md), [materializer decision](docs/adr-002-materializer.md), [request-ahead decision](docs/adr-003-download-ahead.md), and [mail decision](docs/adr-004-mail.md) |
+| Understand the design and guarantees | [Architecture](docs/architecture.md), [storage decision](docs/decisions/adr-001-storage.md), [materializer decision](docs/decisions/adr-002-materializer.md), [request-ahead decision](docs/decisions/adr-003-download-ahead.md), and [mail decision](docs/decisions/adr-004-mail.md) |
 | Review test coverage or release readiness | [Validation](docs/validation.md) |
 | Change the project as a coding agent | [AGENTS.md](AGENTS.md) |
 
@@ -53,10 +53,10 @@ This project uses Restic's **empty-password mode**. There is no separate recover
 
 New installations require macOS with iCloud Drive signed in, Python 3.11 or later, and Restic 0.19.1 or later. Homebrew can supply the dependencies with `brew install python restic`.
 
-Copy [example.config.toml](example.config.toml) to `~/.config/icloud_backup/config.toml`, replace its example sources, and keep that private file outside Git. Then run from this checkout:
+Copy [examples/backup.toml](examples/backup.toml) to `~/.config/icloud_backup/config.toml`, replace its example sources, and keep that private file outside Git. Then run from this checkout:
 
 ```sh
-python3 install.py --initialize
+scripts/install-backup --initialize
 ~/bin/icloud-backup status
 ```
 
@@ -66,6 +66,6 @@ Installation copies the backup programs to stable locations, installs `icloud-ba
 
 ## Develop and verify
 
-Run `make test` from the checkout. [Validation](docs/validation.md) owns focused test commands, dependencies, coverage, and release limits. Keep private configuration, backup stores, archive data, machine logs, and generated build caches outside this repository.
+Start with the [source layout](docs/architecture.md#source-layout), then run `make test` from the checkout. [Validation](docs/validation.md) owns focused test commands, dependencies, coverage, and release limits. Keep private configuration, backup stores, archive data, machine logs, and generated build caches outside this repository.
 
 The project is [MIT licensed](LICENSE).

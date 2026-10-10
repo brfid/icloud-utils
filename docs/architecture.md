@@ -2,9 +2,13 @@
 
 The toolkit keeps backup storage, arbitrary-path materialization, mail access/review tracking, installation, and health reporting as separate responsibilities. Sharing a repository does not make the commands dependencies of each other.
 
-The [storage decision](adr-001-storage.md), [materializer decision](adr-002-materializer.md), and [request-ahead decision](adr-003-download-ahead.md) record why the major choices were made. This document owns current component boundaries and integrity guarantees. [Operations](operations.md) owns procedures, while [Validation](validation.md) owns test coverage and release readiness.
+The [storage decision](decisions/adr-001-storage.md), [materializer decision](decisions/adr-002-materializer.md), and [request-ahead decision](decisions/adr-003-download-ahead.md) record why the major choices were made. This document owns current component boundaries and integrity guarantees. [Operations](operations.md) owns procedures, while [Validation](validation.md) owns test coverage and release readiness.
 
-The [mail decision](adr-004-mail.md) defines the optional Himalaya companion. [Mail](mail.md) owns its configuration, operations, read-only command surface, and local review contract.
+The [mail decision](decisions/adr-004-mail.md) defines the optional Himalaya companion. [Mail](mail.md) owns its configuration, operations, read-only command surface, and local review contract.
+
+## Source layout
+
+`python/` contains the standalone Python programs and source-only installers; `Sources/` contains the Swift targets. `scripts/` provides the installer entry points, and `examples/` holds portable configuration templates. Current operating guides live directly under `docs/`, with design decisions under `docs/decisions/`. `skills/` owns agent instructions, while `tests/` and `tests/support/` contain the disposable checks and their fixtures. These source directories do not change the installed paths or introduce runtime dependencies between components.
 
 ## Design rules
 
@@ -25,13 +29,13 @@ The [mail decision](adr-004-mail.md) defines the optional Himalaya companion. [M
 | `icloud-materialize`: inventory module | Descriptor-relative traversal, metadata and freshness collection, mount boundaries, and stable inventory keys | Payload verification to the fetch operation |
 | `icloud-materialize`: verification module | Space estimates, explicit download requests, coordinated reads, hashing, and file revalidation | Native hydration and coordination to macOS/iCloud |
 | `icloud-materialize`: worker operations | Bounded inventory passes, check/fetch success conditions, and per-root result assembly | Final multi-root aggregation to the parent |
-| `icloud_backup.py`: `Config` / `load_config` | Validated private configuration and path boundaries | Installation layout to the installer |
-| `icloud_backup.py`: `App` | Backup lifecycle, completion state, local locks, engine guards, source health, and safe restore targets | Storage, snapshot selection, verification, and calendar retention to Restic |
-| `icloud_mail.py` | Bounded read-only mail commands, version/result checks, stable IMAP receipt identity, and atomic private review state | Protocols, MIME, attachment retrieval, and credentials to Himalaya |
-| `install_mail.py` | Independent mail runtime/shortcut, preserved routing selection, source-owned skill deployment, toolkit documentation tree, and private migration copies | Mail behavior to the deployed adapter; account configuration remains external |
-| `install.py` | Stable runtime/shortcut, generated launchd jobs, deployment metadata, migration copies, and recovery export | Backup execution to the installed runner |
-| `installer_support.py` | Source-only interpreter selection, atomic text publication, and managed command aliases shared by the Python installers | Runtime behavior remains in each independently deployed component |
-| `watch.py` | Independent supervision of `status --json` and fallback alerts | Health rules to the runner while it can run |
+| `python/icloud_backup.py`: `Config` / `load_config` | Validated private configuration and path boundaries | Installation layout to the installer |
+| `python/icloud_backup.py`: `App` | Backup lifecycle, completion state, local locks, engine guards, source health, and safe restore targets | Storage, snapshot selection, verification, and calendar retention to Restic |
+| `python/icloud_mail.py` | Bounded read-only mail commands, version/result checks, stable IMAP receipt identity, and atomic private review state | Protocols, MIME, attachment retrieval, and credentials to Himalaya |
+| `python/install_mail.py` | Independent mail runtime/shortcut, preserved routing selection, source-owned skill deployment, toolkit documentation tree, and private migration copies | Mail behavior to the deployed adapter; account configuration remains external |
+| `python/install_backup.py` | Stable runtime/shortcut, generated launchd jobs, deployment metadata, migration copies, and recovery export | Backup execution to the installed runner |
+| `python/installer_support.py` | Source-only interpreter selection, atomic text publication, and managed command aliases shared by the Python installers | Runtime behavior remains in each independently deployed component |
+| `python/watch.py` | Independent supervision of `status --json` and fallback alerts | Health rules to the runner while it can run |
 | Restic | Content reuse, compression, internal repository format, snapshots, integrity checks, restore, and retention | Remote file synchronization to iCloud Drive |
 | iCloud Drive | Asynchronous upload and native download-on-read | Local backup success is reported by the runner |
 

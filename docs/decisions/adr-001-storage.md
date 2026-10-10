@@ -10,7 +10,7 @@ The previous implementation wrote complete compressed archives and maintained cu
 
 ## Decision
 
-Use Restic's supported empty-password mode with one backup store directly in iCloud Drive, plus disposable local metadata cache. Use native download-on-read behavior. A small installed runner coordinates local operations; a separate watchdog can report runner failures. Restic owns storage and retention. The current mechanics and tested limits belong to [architecture](architecture.md), and current settings belong to [configuration](configuration.md).
+Use Restic's supported empty-password mode with one backup store directly in iCloud Drive, plus disposable local metadata cache. Use native download-on-read behavior. A small installed runner coordinates local operations; a separate watchdog can report runner failures. Restic owns storage and retention. The current mechanics and tested limits belong to [architecture](../architecture.md), and current settings belong to [configuration](../configuration.md).
 
 ## Options considered
 
@@ -25,7 +25,7 @@ Use Restic's supported empty-password mode with one backup store directly in iCl
 
 Recovery needs the complete backup store but no separately remembered secret. Users rely on Mac/iCloud access controls for privacy. Local completion cannot assert remote availability. Avoiding repacks reduces shared-file rewriting and downloads while permitting some obsolete bytes to remain. These are deliberate tradeoffs rather than a transactional guarantee from iCloud.
 
-Revisit cleanup if wasted cloud space becomes significant. Revisit the destination if multiple writers, independently confirmed off-device completion, or strict remote consistency become requirements. The [operations guide](operations.md) owns installation and recovery procedures; this decision record is not a second runbook.
+Revisit cleanup if wasted cloud space becomes significant. Revisit the destination if multiple writers, independently confirmed off-device completion, or strict remote consistency become requirements. The [operations guide](../operations.md) owns installation and recovery procedures; this decision record is not a second runbook.
 
 ## References
 

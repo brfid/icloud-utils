@@ -99,7 +99,7 @@ def install(config_path, label, initialize):
     else:
         app.identity()
     recovery = config.dest_root/'restic-v2-recovery'
-    atomic_text(recovery/'RECOVERY.txt', Path(__file__).with_name('RECOVERY.txt').read_text())
+    atomic_text(recovery/'RECOVERY.txt', (Path(__file__).resolve().parent.parent/'RECOVERY.txt').read_text())
     atomic_text(recovery/'config-at-install.toml', config_path.read_text())
     # A prior `launchctl disable` survives replacement of the plist and otherwise
     # makes bootstrap fail with an opaque input/output error.

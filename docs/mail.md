@@ -46,10 +46,10 @@ For other installation methods, see [Himalaya's versioned guide](https://github.
    chmod 700 "$HOME/.config/himalaya" "$HOME/.config/icloud-utils"
    ```
 
-2. Copy the [Himalaya example](../example.himalaya.toml) without overwriting an existing file:
+2. Copy the [Himalaya example](../examples/himalaya.toml) without overwriting an existing file:
 
    ```sh
-   (set -C; cat example.himalaya.toml > "$HOME/.config/himalaya/config.toml")
+   (set -C; cat examples/himalaya.toml > "$HOME/.config/himalaya/config.toml")
    chmod 600 "$HOME/.config/himalaya/config.toml"
    ```
 
@@ -126,11 +126,11 @@ The toolkit routing settings are:
 | `state_dir` | Absolute or `~/` path; default `~/Library/Application Support/icloud-utils/mail/state` |
 | `timeout_seconds` | Per-child deadline from 1 through 300; default 30 |
 
-The portable [routing example](../example.mail.toml) contains no identity or credentials. Unknown toolkit settings, invalid table shapes, control characters in routing, and malformed aliases are rejected rather than becoming an alternate password store. The adapter explicitly selects this account/configuration and the IMAP backend for every operation.
+The portable [routing example](../examples/mail.toml) contains no identity or credentials. Unknown toolkit settings, invalid table shapes, control characters in routing, and malformed aliases are rejected rather than becoming an alternate password store. The adapter explicitly selects this account/configuration and the IMAP backend for every operation.
 
 ## Install and update
 
-Installation provides stable `~/bin/` commands and optional agent skills that work after the checkout moves. To run without installation, create private routing from the [routing example](../example.mail.toml), then use `python3 -B icloud_mail.py --config /absolute/path/to/mail.toml --json status` from the checkout.
+Installation provides stable `~/bin/` commands and optional agent skills that work after the checkout moves. To run without installation, create private routing from the [routing example](../examples/mail.toml), then use `python3 -B python/icloud_mail.py --config /absolute/path/to/mail.toml --json status` from the checkout.
 
 For an existing installation, follow [Migration and rollback](#migration-and-rollback) to preserve its selected paths. For a new installation, run from the source checkout:
 

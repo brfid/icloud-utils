@@ -67,6 +67,8 @@ def documentation():
     root = Path(__file__).resolve().parent
     if (root / '.icloud-utils-mail').is_file():
         root = root.parent.parent / 'documentation'
+    else:
+        root = root.parent
     return root / 'docs/mail.md'
 
 

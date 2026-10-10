@@ -13,7 +13,7 @@ from support.mail import MailFixture, ROOT
 
 class MailInstallationTests(MailFixture, unittest.TestCase):
     def install(self, home, *arguments, checkout=ROOT):
-        result = subprocess.run([sys.executable, '-B', str(checkout / 'install_mail.py'), '--home', str(home),
+        result = subprocess.run([sys.executable, '-B', str(checkout / 'python/install_mail.py'), '--home', str(home),
                                  *map(str, arguments)], capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
@@ -49,7 +49,7 @@ class MailInstallationTests(MailFixture, unittest.TestCase):
         launcher = home / 'bin/icloud-mail'
         before = launcher.read_bytes()
         custom.unlink()
-        command = [sys.executable, '-B', str(ROOT / 'install_mail.py'), '--home', str(home)]
+        command = [sys.executable, '-B', str(ROOT / 'python/install_mail.py'), '--home', str(home)]
         result = subprocess.run(command, capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertEqual(launcher.read_bytes(), before)
@@ -79,6 +79,8 @@ class MailInstallationTests(MailFixture, unittest.TestCase):
         self.assert_local_links(list(Path(installed['documentation']).rglob('*.md')) +
                                 [skills / name / 'SKILL.md' for name in ('icloud-utils', 'icloud-mail')])
         self.assertTrue((skills / 'icloud-utils/references/RECOVERY.txt').is_file())
+        self.assertTrue((skills / 'icloud-utils/references/examples/backup.toml').is_file())
+        self.assertTrue((skills / 'icloud-mail/references/examples/himalaya.toml').is_file())
         self.assertFalse((home / 'Library/LaunchAgents').exists())
         self.assertFalse((home / 'Library/Application Support/icloud-backup').exists())
 
@@ -86,7 +88,7 @@ class MailInstallationTests(MailFixture, unittest.TestCase):
         checkout=self.directory/'checkout'
         shutil.copytree(ROOT,checkout,ignore=shutil.ignore_patterns('.git','__pycache__','.DS_Store'))
         home=self.directory/'home'; skills=home/'.codex/skills'
-        command=[sys.executable,'-B',str(checkout/'install_mail.py'),'--home',str(home),'--skills-dir',str(skills),
+        command=[sys.executable,'-B',str(checkout/'python/install_mail.py'),'--home',str(home),'--skills-dir',str(skills),
                  '--himalaya',str(self.fake),'--himalaya-config',str(self.backend_config)]
         backend_before=self.backend_config.read_bytes()
         result=subprocess.run(command,capture_output=True,text=True,timeout=20)
@@ -126,7 +128,7 @@ class MailInstallationTests(MailFixture, unittest.TestCase):
                 target.mkdir(parents=True)
                 sentinel = target / 'keep.txt'
                 sentinel.write_text('unrelated')
-                result = subprocess.run([sys.executable, '-B', ROOT / 'install_mail.py', '--home', home,
+                result = subprocess.run([sys.executable, '-B', ROOT / 'python/install_mail.py', '--home', home,
                                          '--skills-dir', skills], capture_output=True, text=True, timeout=10)
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertEqual(sentinel.read_text(), 'unrelated')
@@ -136,7 +138,7 @@ class MailInstallationTests(MailFixture, unittest.TestCase):
     def test_install_refuses_unrelated_alias_before_creating_runtime(self):
         home=self.directory/'home'; (home/'bin').mkdir(parents=True)
         alias=home/'bin/icmail'; alias.write_text('unrelated')
-        result=subprocess.run([sys.executable,'-B',ROOT/'install_mail.py','--home',home],capture_output=True,text=True,timeout=10)
+        result=subprocess.run([sys.executable,'-B',ROOT/'python/install_mail.py','--home',home],capture_output=True,text=True,timeout=10)
         self.assertEqual(result.returncode,1)
         self.assertEqual(alias.read_text(),'unrelated')
         self.assertFalse((home/'Library').exists())
