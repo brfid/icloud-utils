@@ -140,6 +140,8 @@ scripts/install-mail --config "$HOME/.config/icloud-utils/mail.toml" --account i
   --skills-dir "$HOME/.codex/skills"
 ```
 
+For a nondefault Python executable, use [Select Python for installation](operations.md#select-python-for-installation).
+
 Then [verify the installed commands and private permissions](#verify-the-installed-commands-and-private-permissions).
 
 `--skills-dir` installs or updates the source-owned `icloud-mail` and `icloud-utils` skills. Omit it to install only commands and their documentation. The installer retains existing matching skills in the private migration directory and refuses unrelated skills. Both skills reference shared toolkit documentation outside the mail runtime, including the portable examples and recovery guide. Removing the mail runtime leaves that guidance usable.

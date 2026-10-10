@@ -6,10 +6,16 @@ import sys
 import tempfile
 
 
+def require_python():
+    """Reject an unsupported caller before importing a component's runtime."""
+    if sys.version_info < (3, 11):
+        raise SystemExit('Python 3.11 or newer is required. Set PYTHON to a supported executable.')
+
+
 def stable_python(candidates=None):
     """Select a supported interpreter, skipping unavailable or broken candidates."""
     choices = candidates if candidates is not None else (
-        '/opt/homebrew/bin/python3', '/usr/local/bin/python3', sys.executable)
+        sys.executable, '/opt/homebrew/bin/python3', '/usr/local/bin/python3')
     for candidate in choices:
         candidate = str(candidate)
         if not Path(candidate).is_file():

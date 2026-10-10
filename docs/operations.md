@@ -50,6 +50,16 @@ If the installed command or status is broken, inspect `~/bin/icloud-backup` and 
 
 Backup defaults and configurable local paths are listed in [configuration](configuration.md#runtime-options). Editing installed copies directly is temporary: the next installation replaces them from the checkout. The cache and status files cannot replace the backup store, and the recovery configuration does not control scheduled backups.
 
+## Select Python for installation
+
+`scripts/install-backup` and `scripts/install-mail` use the executable selected by `PYTHON`, or `python3` when it is unset. They reject versions older than 3.11 before importing the component or changing an installation. The invoking interpreter is also preferred for the generated launchers and backup jobs. To select another supported executable, supply its path as one value:
+
+```sh
+PYTHON=/absolute/path/to/python3 scripts/install-backup --help
+```
+
+The same override works with the mail installer and the Python test targets described in [Validation](validation.md#automated-coverage).
+
 ## Update an existing backup installation
 
 1. Discover the active configuration and base label as above. Check for an active operation before deployment; installation unloads the selected jobs and may interrupt one.

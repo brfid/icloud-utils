@@ -15,8 +15,10 @@ import subprocess
 import sys
 import tempfile
 
+from installer_support import atomic_text, install_alias, require_python, stable_python, validate_alias
+
+require_python()
 from icloud_mail import Config, Failure
-from installer_support import atomic_text, install_alias, stable_python, validate_alias
 
 MARKER = '# icloud-utils mail launcher'
 DOCUMENTATION_FILES = ('README.md', 'AGENTS.md', 'RECOVERY.txt', 'LICENSE')

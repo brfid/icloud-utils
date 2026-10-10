@@ -79,13 +79,13 @@ The final object includes:
 
 Source builds require Apple Swift, Foundation, Darwin, CryptoKit, and a compatible macOS SDK from Command Line Tools. No third-party packages, full Xcode, simulator, Python, or Restic are required for the materializer. The package declares macOS 13 as its deployment target. That is a compilation target, not a claim of runtime testing on macOS 13.
 
-The currently reproducible local commands pin the installed macOS 26.5 SDK because this machine's default SDK 27 and compiler have mismatched patch builds:
+Builds discover the selected macOS SDK through `xcrun`. Run the build and disposable CLI checks from the checkout; the checks additionally require Python 3.11 or later:
 
 ```sh
 make build
-make test
+make test-materializer
 ```
 
-Build products and module caches stay under the configurable `SWIFT_SCRATCH` and `/tmp` paths rather than Git. Override `SWIFT_SDK` and `SWIFT_SCRATCH` when using another compatible installed toolchain. `make test` uses disposable local files and Restic repositories; debug-only environment injection exercises blocking calls and failure paths but is absent from release builds.
+Build products and module caches stay under the configurable `SWIFT_SCRATCH` and `/tmp` paths rather than Git. If the selected SDK and compiler are incompatible, select an installed compatible SDK with `SWIFT_SDK=/absolute/path/to/MacOSX.sdk`; `SWIFT_SCRATCH` also accepts an explicit build directory. [Validation](validation.md#automated-coverage) describes Python selection and the combined toolkit checks. Debug-only environment injection exercises blocking calls and failure paths but is absent from release builds.
 
 For a release build, checksum, and readiness checks, continue with [Validation](validation.md#validate-a-local-release). After validation, follow [Install or remove the materializer](operations.md#install-or-remove-the-materializer). The installer intentionally has no release-download or auto-update behavior.

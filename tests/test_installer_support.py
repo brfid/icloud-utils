@@ -1,6 +1,8 @@
 """Check shared deployment primitives independently of component runtimes."""
+import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -8,7 +10,7 @@ import unittest
 from unittest import mock
 
 from support import ROOT
-from installer_support import atomic_text, install_alias, stable_python
+from installer_support import atomic_text, install_alias, require_python, stable_python
 
 
 class InstallerSupportTests(unittest.TestCase):
@@ -26,6 +28,37 @@ class InstallerSupportTests(unittest.TestCase):
         self.assertEqual(stable_python([self.directory / 'missing', broken, old, sys.executable]), sys.executable)
         with self.assertRaisesRegex(RuntimeError, '3.11'):
             stable_python([broken, old])
+
+    def test_default_selection_preserves_the_invoking_python(self):
+        with mock.patch('installer_support.subprocess.run', return_value=
+                        subprocess.CompletedProcess([], 0, '1\n', '')) as probe:
+            self.assertEqual(stable_python(), sys.executable)
+        self.assertEqual(probe.call_args.args[0][0], sys.executable)
+
+    def test_old_python_is_rejected_before_component_imports(self):
+        with mock.patch('installer_support.sys.version_info', (3, 10)):
+            with self.assertRaisesRegex(SystemExit, 'Python 3.11.*Set PYTHON'):
+                require_python()
+
+    def test_installer_entry_points_preserve_override_arguments_and_exit_status(self):
+        checkout = self.directory / 'checkout with spaces'
+        shutil.copytree(ROOT, checkout, ignore=shutil.ignore_patterns('.git', '__pycache__', '.DS_Store'))
+        arguments = ['--config', str(self.directory / 'private routing/mail.toml'), '--help']
+        for component in ('backup', 'mail'):
+            with self.subTest(component=component):
+                log = self.directory / (component + '.json')
+                interpreter = self.directory / 'selected python'
+                interpreter.write_text(
+                    '#!' + sys.executable + '\nimport json, pathlib, sys\n'
+                    f'pathlib.Path({str(log)!r}).write_text(json.dumps(sys.argv[1:]))\n'
+                    'raise SystemExit(7)\n')
+                interpreter.chmod(0o700)
+                result = subprocess.run([checkout / ('scripts/install-' + component), *arguments],
+                                        env=dict(os.environ, PYTHON=str(interpreter)), cwd='/',
+                                        capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
+                self.assertEqual(json.loads(log.read_text()),
+                                 ['-B', str(checkout / ('python/install_' + component + '.py')), *arguments])
 
     def test_interpreter_timeout_allows_the_next_candidate(self):
         with mock.patch('installer_support.subprocess.run', side_effect=[

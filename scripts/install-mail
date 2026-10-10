@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
 source_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-exec python3 -B "$source_dir/python/install_mail.py" "$@"
+exec "${PYTHON:-python3}" -B "$source_dir/python/install_mail.py" "$@"

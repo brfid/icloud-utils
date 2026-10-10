@@ -19,8 +19,9 @@ Select focused checks as needed:
 | `make test-mail` | Mail commands, configuration, review state, documentation, and installation; no Swift or Restic required |
 | `make test-backup` | Backup, backup installation, and retention; requires Restic |
 | `make test-installers` | Shared deployment helpers and disposable backup and mail installations; requires Restic |
+| `make test-materializer` | Builds and checks the native CLI using disposable local files; requires Swift and Python, with no Restic or Himalaya dependency |
 
-Each target accepts `PYTHON=/absolute/path/to/python3` to select Python 3.11 or later. Mail tests have separate modules for each responsibility and share disposable backend/account fixtures in `tests/support/`. Backup and retention tests share their own temporary-store fixture without importing another test module. Shared installer tests cover candidate-interpreter failure/timeout fallback, collision refusal, atomic-publication failures, and command-alias argument/exit behavior.
+Each target accepts `PYTHON=/absolute/path/to/python3` to select Python 3.11 or later and fails early for older interpreters. The installers use [the same selection override](operations.md#select-python-for-installation). Mail tests have separate modules for each responsibility and share disposable backend/account fixtures in `tests/support/`. Backup and retention tests share their own temporary-store fixture without importing another test module. Shared installer tests cover invoking-interpreter preference, candidate failure/timeout fallback, old-version rejection, exact entry-point argument/exit forwarding, collision refusal, and atomic-publication failures.
 
 Mail checks have been exercised on Python 3.11 and 3.14. A process sandbox can deny Foundation coordinated reads even for disposable local files; a native test failure in that environment needs comparison with the same tests in an ordinary authorized macOS environment. Do not weaken native-read checks to accommodate that restriction.
 

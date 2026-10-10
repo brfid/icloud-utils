@@ -13,8 +13,10 @@ import subprocess
 import sys
 import time
 
+from installer_support import atomic_text, install_alias, require_python, stable_python, validate_alias
+
+require_python()
 import icloud_backup as ib
-from installer_support import atomic_text, install_alias, stable_python, validate_alias
 
 
 def plans(home, config, interpreter, label):
