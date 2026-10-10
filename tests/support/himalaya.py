@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import json, os, pathlib, re, subprocess, sys, time
 scenario=json.loads(pathlib.Path(os.environ['MAIL_TEST_SCENARIO']).read_text())
+version=scenario.get('version','2.2.1')
 args=sys.argv[1:]
 if args==['--version']:
-    print('himalaya v'+scenario.get('version','2.1.0'))
+    print('himalaya v'+version)
     sys.exit(0)
 with open(os.environ['MAIL_TEST_CALLS'],'a') as f:
     f.write(json.dumps(args)+'\n')
@@ -42,9 +43,13 @@ elif kind==('account','check'):
     ok=scenario.get('auth_ok',True)
     print(json.dumps({'account':'icloud','backends':[{'backend':'imap','ok':ok,'error':None if ok else 'private-auth-error'}]}))
 elif kind==('mailbox','list'):
-    print(json.dumps({'mailboxes':[{'name':'INBOX'}]}))
+    row={'id':'INBOX','name':'INBOX'}
+    if version=='2.2.1': row['role']='inbox'
+    print(json.dumps({'mailboxes':[row]}))
 elif args[0]=='envelope':
-    print(json.dumps({'envelopes':[{'id':'7','subject':'Synthetic fixture','flags':[]}]}))
+    result={'envelopes':[{'id':'7','subject':'Synthetic fixture','flags':[]}]}
+    if version=='2.2.1': result['queued']=0
+    print(json.dumps(result))
 elif kind==('message','read'):
     if scenario.get('fail'):
         print('private-body-and-credential-sentinel')

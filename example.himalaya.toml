@@ -1,4 +1,4 @@
-# Himalaya 2.1.0 IMAP example, not toolkit routing or live configuration.
+# Himalaya 2.1.0 and 2.2.1 IMAP example, not toolkit routing or live configuration.
 # For an existing file, merge this account table instead of replacing the file.
 # Replace both placeholder addresses and the Keychain account label privately.
 [accounts.icloud]

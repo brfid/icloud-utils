@@ -1,6 +1,6 @@
 # Himalaya mail companion
 
-`icloud-mail` (`icmail`) is an optional companion that requires Python 3.11 or later. It uses Himalaya **2.1.0**, the supported release, for IMAP, message parsing, and authentication. It needs neither Restic nor the Swift materializer and creates no scheduled jobs. Terminal users and agents use the same command contract.
+`icloud-mail` (`icmail`) is an optional companion that requires Python 3.11 or later. It supports Himalaya **2.1.0 and 2.2.1** for IMAP, message parsing, and authentication. Other releases require contract verification before use. It needs neither Restic nor the Swift materializer and creates no scheduled jobs. Terminal users and agents use the same command contract.
 
 ## Setup and credentials
 
@@ -18,7 +18,7 @@ If Himalaya already works, use [migration](#migration-and-rollback) before insta
 
 ### Install and check prerequisites
 
-1. Install Python 3.11 or later and Himalaya 2.1.0 with IMAP support. Homebrew is one installation option:
+1. Install Python 3.11 or later and a [supported Himalaya release](#himalaya-mail-companion) with IMAP support. Homebrew is one installation option:
 
    ```sh
    brew install python himalaya
@@ -32,9 +32,9 @@ If Himalaya already works, use [migration](#migration-and-rollback) before insta
    command -v himalaya
    ```
 
-   Confirm that `python3` is version 3.11 or later and Himalaya is **2.1.0**. If a package manager supplies a newer Himalaya release, select a supported binary from [the upstream 2.1.0 release](https://github.com/pimalaya/himalaya/releases/tag/v2.1.0). Package upgrades do not widen the adapter's support. Use the discovered executable path when installing, so Apple silicon and Intel Homebrew prefixes both work.
+   Confirm that `python3` is version 3.11 or later and Himalaya reports a supported version. If a package manager supplies an unsupported release, select a tested binary such as [the upstream 2.2.1 release](https://github.com/pimalaya/himalaya/releases/tag/v2.2.1). Package upgrades do not widen the adapter's support. Use the discovered executable path when installing, so Apple silicon and Intel Homebrew prefixes both work.
 
-For other installation methods, see [Himalaya's versioned guide](https://github.com/pimalaya/himalaya/blob/v2.1.0/README.md).
+For other installation methods, see [Himalaya's versioned guide](https://github.com/pimalaya/himalaya/blob/v2.2.1/README.md).
 
 ### Create the private account configuration
 
@@ -57,7 +57,7 @@ For other installation methods, see [Himalaya's versioned guide](https://github.
 
 3. Edit the private copy. Replace `primary@example.invalid` with the mailbox's primary login and Keychain account label, and `preferred-alias@example.invalid` with your preferred sender identity. The account key `icloud` is a local routing name, not a login address. Keep it consistent with toolkit `mail.account`.
 
-Apple specifies TLS IMAP on `imap.mail.me.com:993`; its [server settings](https://support.apple.com/en-us/102525) describe using the address's local part as the username and trying the full address if needed. Preserve a working login; the example uses the full-address form. The `email` sender alias may differ from that login. Inbox is explicit. Add other aliases only after enumerating actual mailbox names. Local sort fallback avoids iCloud's advertised but ineffective server sorting; see [the upstream iCloud report](https://github.com/pimalaya/himalaya/blob/v2.1.0/cairn/spec/testing/imap-icloud.md). The command-array credential syntax is documented in [Himalaya's versioned configuration sample](https://github.com/pimalaya/himalaya/blob/v2.1.0/config.sample.toml).
+Apple specifies TLS IMAP on `imap.mail.me.com:993`; its [server settings](https://support.apple.com/en-us/102525) describe using the address's local part as the username and trying the full address if needed. Preserve a working login; the example uses the full-address form. The `email` sender alias may differ from that login. Inbox is explicit. Add other aliases only after enumerating actual mailbox names. Local sort fallback avoids iCloud's advertised but ineffective server sorting; see [the upstream iCloud report](https://github.com/pimalaya/himalaya/blob/v2.1.0/cairn/spec/testing/imap-icloud.md). The command-array credential syntax is documented in [Himalaya's versioned configuration sample](https://github.com/pimalaya/himalaya/blob/v2.2.1/config.sample.toml).
 
 ### Store an app-specific password in a credential provider
 
@@ -163,7 +163,7 @@ First stop any separately configured mail automation. Remove only the identified
 
 | Symptom or error stage | Check and next step |
 | --- | --- |
-| `dependency` or `compatibility` | Check the configured executable's `--version`; select Himalaya 2.1.0. Creation flags do not change an existing toolkit file; edit its `himalaya` routing deliberately. |
+| `dependency` or `compatibility` | Check the configured executable's `--version`; select a [supported release](#himalaya-mail-companion). Creation flags do not change an existing toolkit file; edit its `himalaya` routing deliberately. |
 | `configuration`, or unexpected selected paths | Inspect `status` and the generated launcher's `--config` argument if status fails. Toolkit routing has only `[mail]`; Himalaya has `[accounts.KEY]`. Check table shapes, account key, absolute/`~/` paths, `imap.sasl.plain.username`, aliases, and `imap.sort.fallback = true`. |
 | Installer cannot discover routing | Restore the missing selected file or rerun with its explicit `--config`. Do not accept a default file as evidence of the previous selection. |
 | `authentication`, including account check exit 0 | Inspect `backends[].ok`; confirm the primary login and matching credential account/service. Check app-specific password validity once. Primary Apple Account password changes revoke app-specific passwords; see [Apple's app-specific password instructions](https://support.apple.com/en-us/102654). Rotate only the intended item when necessary. |
@@ -177,7 +177,7 @@ First stop any separately configured mail automation. Remove only the identified
 
 ## Migration and rollback
 
-For an existing Himalaya 2.1.0 account, retain the actual configuration path, account key, login, preferred `email` alias, and working credential command. Inspect locally rather than copying identity or secrets into the checkout. Merge missing inbox alias/sort-fallback settings into that selected account only, keeping all other accounts and any SMTP settings. An old pre-2.x schema needs deliberate conversion against [the versioned sample](https://github.com/pimalaya/himalaya/blob/v2.1.0/config.sample.toml); do not run a wizard over the working file or assume old keys still apply. Keep a private `0600` recovery copy before a manual edit, then [verify Himalaya](#verify-himalaya).
+For an existing account on a supported Himalaya release, retain the actual configuration path, account key, login, preferred `email` alias, and working credential command. Inspect locally rather than copying identity or secrets into the checkout. Merge missing inbox alias/sort-fallback settings into that selected account only, keeping all other accounts and any SMTP settings. An old pre-2.x schema needs deliberate conversion against [the versioned sample](https://github.com/pimalaya/himalaya/blob/v2.2.1/config.sample.toml); do not run a wizard over the working file or assume old keys still apply. Keep a private `0600` recovery copy before a manual edit, then [verify Himalaya](#verify-himalaya).
 
 For an installed companion, discover `configuration` and `stateDirectory` through `icmail --json status`. If it cannot run, inspect the generated launcher to find its selected toolkit path. Retain that routing file and review state, then run:
 

@@ -16,13 +16,31 @@ class MailAdapterTests(MailFixture, unittest.TestCase):
             result = subprocess.run(invalid, capture_output=True, text=True, env=self.environment, timeout=5)
             self.assertNotEqual(result.returncode, 0)
 
-    def test_all_read_operations_obey_the_strict_backend_contract(self):
-        for arguments in (('doctor',), ('mailboxes',), ('attachments', '--mailbox', 'INBOX', '7'),
-                          ('search', '--mailbox=--seen', '--query=subject invoice')):
-            with self.subTest(arguments=arguments):
-                result, data = self.run_cli(*arguments)
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertTrue(data['success'])
+    def test_supported_releases_share_the_strict_read_only_contract(self):
+        receipts = []
+        for version in ('2.1.0', '2.2.1'):
+            self.scenario_set(version=version)
+            commands = (('status',), ('doctor',), ('mailboxes',),
+                        ('list', '--mailbox', 'INBOX', '--page-size', '5'),
+                        ('search', '--mailbox=--seen', '--query=subject invoice'),
+                        ('read', '--mailbox', 'INBOX', '7'),
+                        ('attachments', '--mailbox', 'INBOX', '7'),
+                        ('download', '--mailbox', 'INBOX', '7', '--part', '3',
+                         '--target', str(self.directory / ('download-' + version))))
+            for arguments in commands:
+                with self.subTest(version=version, arguments=arguments):
+                    result, data = self.run_cli(*arguments)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertTrue(data['success'])
+                    if arguments[0] == 'status':
+                        self.assertEqual(data['data']['himalayaVersion'], version)
+                    elif arguments[0] in ('list', 'search'):
+                        self.assertFalse(data['data']['scopeCoverageComplete'])
+                        self.assertEqual(data['data'].get('queued'), 0 if version == '2.2.1' else None)
+                    elif arguments[0] == 'read':
+                        self.assertFalse(data['data']['review']['reviewed'])
+                        receipts.append(data['data']['review']['receipt'])
+        self.assertEqual(receipts[0], receipts[1])
 
     def test_backend_failures_do_not_leak_streams_or_create_receipts(self):
         for scenario in ({'fail':True}, {'invalid_json':True}, {'message':''}):

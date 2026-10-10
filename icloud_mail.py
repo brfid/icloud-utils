@@ -22,8 +22,8 @@ import sys
 import tempfile
 import tomllib
 
-VERSION = '1.0.0'
-SUPPORTED_HIMALAYA = '2.1.0'
+VERSION = '1.0.1'
+SUPPORTED_HIMALAYA_VERSIONS = ('2.1.0', '2.2.1')
 DEFAULT_CONFIG = Path.home() / '.config/icloud-utils/mail.toml'
 
 
@@ -184,8 +184,9 @@ class Backend:
             raise Failure('dependency', 'Himalaya is missing; install the supported release or set mail.himalaya.')
         version = self.process(['--version']).stdout.strip()
         match = re.match(r'himalaya v?(\d+\.\d+\.\d+)(?:\s|$)', version)
-        if not match or match.group(1) != SUPPORTED_HIMALAYA:
-            raise Failure('compatibility', f'This mail adapter supports Himalaya {SUPPORTED_HIMALAYA}; test newer releases before updating the supported version.')
+        if not match or match.group(1) not in SUPPORTED_HIMALAYA_VERSIONS:
+            supported = ', '.join(SUPPORTED_HIMALAYA_VERSIONS)
+            raise Failure('compatibility', f'This mail adapter supports Himalaya {supported}; test other releases before updating the supported versions.')
         self.version = match.group(1)
 
     def process(self, arguments):
