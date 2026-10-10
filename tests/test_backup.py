@@ -1,47 +1,21 @@
 """Exercise safety boundaries and real password-free Restic recovery."""
-import contextlib
 import dataclasses
 import datetime as dt
-import io
 import json
-import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 import types
 import unittest
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from support.backup import BackupFixture, RESTIC
 import icloud_backup as ib
 
-RESTIC = shutil.which('restic')
 
-
-class Fixture(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name).resolve()
-        self.source = self.root/'source'; self.source.mkdir()
-        (self.source/'version.txt').write_text('first version\n')
-        self.c = ib.Config(self.root/'backups', (ib.Source('source', self.source, ('.git','*.git','.DS_Store')),),
-                           state_dir=self.root/'state', cache_dir=self.root/'cache', flag_path=self.root/'warning.txt',
-                           restic=RESTIC or '/missing/restic', reserve_mib=0)
-        self.app = ib.App(self.c)
-        self.alerts = mock.patch.object(ib, 'notify')
-        self.alerts.start()
-        self.stdout = contextlib.redirect_stdout(io.StringIO()); self.stdout.__enter__()
-
-    def tearDown(self):
-        self.stdout.__exit__(None,None,None)
-        self.alerts.stop()
-        self.tmp.cleanup()
-
-
-class EngineIO(Fixture):
+class EngineIO(BackupFixture):
     def test_retry_diagnostics_do_not_corrupt_successful_json(self):
         engine = self.root/'engine'
         engine.write_text('#!/bin/sh\necho "transient cloud read; retrying" >&2\necho \'{"id":"fixture"}\'\n')
@@ -113,7 +87,7 @@ class EngineIO(Fixture):
             libc.setiopolicy_np(3, 0, original)
 
 
-class ConfigSafety(Fixture):
+class ConfigSafety(BackupFixture):
     def test_destination_recursion_aliases_and_overlaps_rejected(self):
         bad = dataclasses.replace(self.c, dest_root=self.source/'backups')
         with self.assertRaisesRegex(ValueError,'overlaps'):
@@ -175,7 +149,7 @@ class ConfigSafety(Fixture):
         self.assertIn('repository is missing',self.app.problems(False))
 
 
-class RepositoryDownload(Fixture):
+class RepositoryDownload(BackupFixture):
     def test_cloud_only_inventory_excludes_locks_and_nonregular_files(self):
         pack = self.c.repository/'data'/'aa'/'pack'
         lock = self.c.repository/'locks'/'transient'
@@ -228,7 +202,7 @@ class RepositoryDownload(Fixture):
 
 
 @unittest.skipUnless(RESTIC,'Restic executable required')
-class RealEngine(Fixture):
+class RealEngine(BackupFixture):
     def init_run(self):
         self.app.initialize();self.app.run()
 

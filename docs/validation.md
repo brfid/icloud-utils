@@ -12,6 +12,10 @@ Run the combined suite from the checkout:
 make test
 ```
 
+Use `make test-mail`, `make test-backup`, or `make test-installers` for the corresponding focused checks. Each accepts `PYTHON=/absolute/path/to/a/Python-3.11-or-newer` when needed. Mail command, configuration, review-state, documentation, and installation tests have separate modules; disposable backend/account fixtures live in `tests/support/`. Backup and retention tests share their own temporary-store fixture without importing another test module. Shared installer tests cover candidate-interpreter failure/timeout fallback, collision refusal, atomic-publication failures, and command-alias argument/exit behavior. No installed runtime imports the source-only deployment helpers.
+
+Mail checks have been exercised on Python 3.11 and 3.14. A process sandbox can deny Foundation coordinated reads even for disposable local files; a native test failure in that environment needs comparison with the same tests in an ordinary authorized macOS environment. Do not weaken native-read checks to accommodate that restriction.
+
 The backup tests use temporary data and real empty-password Restic repositories. They cover version and deletion recovery, hidden files, symlinks, exclusions, independent source groups, retention across year and leap-day boundaries, interrupted children, and injected read, check, and space failures. They verify that earlier completed recovery points survive failures and that later runs can recover.
 
 Installation tests cover configuration selection, schedule wiring, command aliases, the watchdog's missing-runner path, and an installed runtime after its fixture checkout is removed. Materializer tests cover scope resolution, metadata inventory, complete reads with hashing off by default, optional hashing, bounded request-ahead order and limits, stability, timeouts, interruptions, special files, legacy placeholders, installers, and injected failures. Unsafe failure injection and request-order tracing are compiled only into debug builds.

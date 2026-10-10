@@ -14,6 +14,7 @@ import sys
 import time
 
 import icloud_backup as ib
+from installer_support import atomic_text, install_alias, stable_python, validate_alias
 
 
 def plans(home, config, interpreter, label):
@@ -34,39 +35,6 @@ def plans(home, config, interpreter, label):
                  StartInterval=21600, StandardOutPath=str(logs/'icloud-backup-watch.log'), StandardErrorPath=str(logs/'icloud-backup-watch.log'))
     launcher = '#!/bin/sh\nexec ' + ' '.join(shlex.quote(x) for x in [interpreter, str(runner), '--config', str(config)]) + ' "$@"\n'
     return runner, watcher, launcher, {agents/(label+'.plist'): backup, agents/(label+'-watch.plist'): watch}
-
-
-def stable_python():
-    """Prefer a supported Homebrew command that survives routine version upgrades."""
-    for path in ['/opt/homebrew/bin/python3', '/usr/local/bin/python3', sys.executable]:
-        if Path(path).is_file():
-            result = subprocess.run([path, '-c', 'import sys; print(int(sys.version_info >= (3, 11)))'], capture_output=True, text=True, check=True)
-            if result.stdout.strip() == '1':
-                return path
-    raise RuntimeError('Python 3.11 or newer is required')
-
-
-def validate_alias(alias, canonical):
-    """Reject an occupied alias unless it already names this canonical command."""
-    alias = Path(alias)
-    canonical = Path(canonical)
-    if os.path.lexists(alias):
-        if not alias.is_symlink() or alias.resolve() != canonical.resolve():
-            raise RuntimeError(f'refusing to replace unrelated command alias: {alias}')
-
-
-def install_alias(alias, canonical):
-    """Atomically install a relative symlink without replacing an unrelated name."""
-    alias = Path(alias)
-    canonical = Path(canonical)
-    validate_alias(alias, canonical)
-    temporary = alias.with_name(f'.{alias.name}.installing-{os.getpid()}')
-    temporary.unlink(missing_ok=True)
-    try:
-        temporary.symlink_to(canonical.name)
-        os.replace(temporary, alias)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def install(config_path, label, initialize):
@@ -109,15 +77,15 @@ def install(config_path, label, initialize):
         previous[job] = loaded
         if loaded:
             subprocess.run(['/bin/launchctl', 'bootout', domain+'/'+job], check=True, capture_output=True)
-    ib.atomic_write(migration/'previous-jobs.json', json.dumps(previous, indent=2)+'\n')
+    atomic_text(migration/'previous-jobs.json', json.dumps(previous, indent=2)+'\n')
     app = ib.App(config)
     with ib.run_lock(config.state_dir/'run.lock'):
         for filename, target in [('icloud_backup.py', runner), ('watch.py', watcher)]:
-            ib.atomic_write(target, Path(__file__).with_name(filename).read_text(), 0o700)
-        ib.atomic_write(backup_command, launcher, 0o700)
+            atomic_text(target, Path(__file__).with_name(filename).read_text(), 0o700)
+        atomic_text(backup_command, launcher, 0o700)
         install_alias(backup_alias, backup_command)
         for path, data in plists.items():
-            ib.atomic_write(path, plistlib.dumps(data).decode())
+            atomic_text(path, plistlib.dumps(data).decode())
             subprocess.run(['/usr/bin/plutil', '-lint', str(path)], check=True)
         (home/'Library/Logs').mkdir(parents=True, exist_ok=True)
         app.state['installation'] = {'program': str(runner), 'watchdog': str(watcher),
@@ -131,8 +99,8 @@ def install(config_path, label, initialize):
     else:
         app.identity()
     recovery = config.dest_root/'restic-v2-recovery'
-    ib.atomic_write(recovery/'RECOVERY.txt', Path(__file__).with_name('RECOVERY.txt').read_text())
-    ib.atomic_write(recovery/'config-at-install.toml', config_path.read_text())
+    atomic_text(recovery/'RECOVERY.txt', Path(__file__).with_name('RECOVERY.txt').read_text())
+    atomic_text(recovery/'config-at-install.toml', config_path.read_text())
     # A prior `launchctl disable` survives replacement of the plist and otherwise
     # makes bootstrap fail with an opaque input/output error.
     for job in [label, label+'-watch']:

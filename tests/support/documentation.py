@@ -1,5 +1,4 @@
 """Check local Markdown destinations in source and deployed documentation."""
-from pathlib import Path
 import re
 from urllib.parse import unquote, urlsplit
 

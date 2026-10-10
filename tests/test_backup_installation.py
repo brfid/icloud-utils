@@ -1,6 +1,5 @@
 """Verify scheduler wiring and recovery from a missing development checkout."""
 import json
-from pathlib import Path
 import shlex
 import shutil
 import subprocess
@@ -8,14 +7,13 @@ import sys
 import unittest
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_backup import Fixture, RESTIC
+from support.backup import BackupFixture, RESTIC
 import icloud_backup as ib
 import install
 import watch
 
 
-class Installation(Fixture):
+class BackupInstallationTests(BackupFixture):
     def test_jobs_use_stable_runtime_and_have_catchup_and_separate_watchdog(self):
         home = self.root/'home with spaces'
         config = home/'.config/icloud_backup/config.toml'
@@ -72,7 +70,7 @@ class Installation(Fixture):
         companion.write_text(
             '#!/bin/sh\n'
             'if [ "$1" = --version ]; then echo "icloud-materialize 1.0.0 (JSON schema 1.0)"; exit 0; fi\n'
-            'test "$1" = fetch && test "$2" = --json && test "$3" = -- && test "$4" = /fixture\n'
+            'test "$#" = 4 && test "$1" = fetch && test "$2" = --json && test "$3" = -- && test "$4" = /fixture || exit 99\n'
             'exit 7\n')
         companion.chmod(0o700)
         status = ib.dispatch_materializer(

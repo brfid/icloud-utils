@@ -156,7 +156,7 @@ class Config:
                 raise ValueError('mailbox aliases must be distinct ignoring case')
             return account
         except (OSError, KeyError, TypeError, ValueError):
-            raise Failure('configuration', 'Himalaya must define the selected IMAP account, plain login, and local sort fallback; see docs/mail.md.') from None
+            raise Failure('configuration', f'Himalaya must define the selected IMAP account, plain login, local sort fallback, and valid mailbox aliases; see {documentation()}.') from None
 
     def scope(self):
         account = self.account_settings()

@@ -74,6 +74,6 @@ Installation copies the backup programs to stable locations, installs `icloud-ba
 
 ## Develop and verify
 
-`make test` builds the Swift command and runs disposable materializer, backup, retention, wrapper, alias, mail-adapter, review-state, and installation tests. `make test-mail` runs the isolated mail suite without Swift or Restic. Release and platform limits are recorded in [Validation](docs/validation.md). No private configuration, backup store, archive data, machine logs, or generated build caches belong in this repository.
+`make test` builds the Swift command and runs disposable materializer, backup, retention, wrapper, alias, mail-adapter, review-state, and installation tests. `make test-mail` runs the isolated mail suite without Swift or Restic; `make test-backup` and `make test-installers` select backup or deployment checks. Set `PYTHON=/path/to/python3.11-or-newer` when the default `python3` is unsuitable. Release and platform limits are recorded in [Validation](docs/validation.md). No private configuration, backup store, archive data, machine logs, or generated build caches belong in this repository.
 
 The project is [MIT licensed](LICENSE).

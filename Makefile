@@ -1,16 +1,17 @@
 SWIFT_SDK ?= /Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk
 SWIFT_SCRATCH ?= /tmp/icloud-utils-swift-build
+PYTHON ?= python3
 SWIFT_ENV = SDKROOT=$(SWIFT_SDK) CLANG_MODULE_CACHE_PATH=/tmp/icloud-utils-clang-cache SWIFTPM_MODULECACHE_OVERRIDE=/tmp/icloud-utils-swiftpm-cache
 SWIFT = $(SWIFT_ENV) swift
 
-.PHONY: build test release checksum fixture-helper install-materializer uninstall-materializer test-mail install-mail
+.PHONY: build test release checksum fixture-helper install-materializer uninstall-materializer test-mail test-backup test-installers install-mail
 
 build:
 	$(SWIFT) build --disable-sandbox --sdk $(SWIFT_SDK) --scratch-path $(SWIFT_SCRATCH)
 
 test:
 	$(SWIFT) build --disable-sandbox --sdk $(SWIFT_SDK) --scratch-path $(SWIFT_SCRATCH)
-	PYTHONDONTWRITEBYTECODE=1 ICMAT_TEST_BINARY=$(SWIFT_SCRATCH)/debug/icloud-materialize python3 -m unittest discover -s tests -v
+	PYTHONDONTWRITEBYTECODE=1 ICMAT_TEST_BINARY=$(SWIFT_SCRATCH)/debug/icloud-materialize $(PYTHON) -m unittest discover -s tests -v
 
 release:
 	$(SWIFT) build --disable-sandbox --sdk $(SWIFT_SDK) --scratch-path $(SWIFT_SCRATCH) -c release
@@ -28,7 +29,15 @@ uninstall-materializer:
 	scripts/install-materializer --uninstall
 
 test-mail:
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mail*.py' -v
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests -p 'test_mail*.py' -v
+
+test-backup:
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests -p 'test_backup*.py' -v
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests -p 'test_retention.py' -v
+
+test-installers:
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests -p 'test_installer*.py' -v
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s tests -p 'test_*installation.py' -v
 
 install-mail:
 	scripts/install-mail

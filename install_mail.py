@@ -16,32 +16,10 @@ import sys
 import tempfile
 
 from icloud_mail import Config, Failure
+from installer_support import atomic_text, install_alias, stable_python, validate_alias
 
 MARKER = '# icloud-utils mail launcher'
 DOCUMENTATION_FILES = ('README.md', 'AGENTS.md', 'RECOVERY.txt', 'LICENSE', 'example.config.toml', 'example.mail.toml', 'example.himalaya.toml')
-
-
-def atomic_text(path, text, mode):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix=f'.{path.name}-', dir=path.parent)
-    try:
-        with os.fdopen(descriptor, 'w') as stream:
-            stream.write(text)
-        os.chmod(temporary, mode)
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
-
-
-def interpreter():
-    for candidate in ['/opt/homebrew/bin/python3', '/usr/local/bin/python3', sys.executable]:
-        if Path(candidate).is_file():
-            result = subprocess.run([candidate, '-c', 'import sys; print(int(sys.version_info >= (3,11)))'],
-                                    text=True, capture_output=True, timeout=10, check=True)
-            if result.stdout.strip() == '1':
-                return candidate
-    raise RuntimeError('Python 3.11 or newer is required')
 
 
 def selected_config(home, canonical, runtime, explicit):
@@ -76,8 +54,7 @@ def install(home, config=None, skills_dir=None, himalaya='himalaya', himalaya_co
     canonical, alias = home / 'bin/icloud-mail', home / 'bin/icmail'
     if os.path.lexists(canonical) and (canonical.is_symlink() or MARKER not in canonical.read_text()):
         raise RuntimeError(f'Refusing to replace unrelated command: {canonical}')
-    if os.path.lexists(alias) and (not alias.is_symlink() or os.readlink(alias) != 'icloud-mail'):
-        raise RuntimeError(f'Refusing to replace unrelated command alias: {alias}')
+    validate_alias(alias, canonical)
     if os.path.lexists(runtime) and (runtime.is_symlink() or not (runtime / '.icloud-utils-mail').is_file()):
         raise RuntimeError(f'Refusing to replace an unrecognized mail runtime: {runtime}')
     if os.path.lexists(documentation) and (documentation.is_symlink() or not (documentation / '.icloud-utils-documentation').is_file()):
@@ -103,6 +80,7 @@ def install(home, config=None, skills_dir=None, himalaya='himalaya', himalaya_co
                 entrypoint = target / 'SKILL.md'
                 if not entrypoint.is_file() or f'name: {skill.name}\n' not in entrypoint.read_text():
                     raise RuntimeError(f'Refusing to replace an unrelated skill: {target}')
+    python = stable_python()
     support.mkdir(parents=True, exist_ok=True, mode=0o700)
     support.chmod(0o700)
     stamp = dt.datetime.now(dt.UTC).strftime('%Y%m%dT%H%M%S.%fZ')
@@ -121,7 +99,7 @@ def install(home, config=None, skills_dir=None, himalaya='himalaya', himalaya_co
             shutil.copy2(source / filename, doc_staging / filename)
         (doc_staging / '.icloud-utils-documentation').write_text('Toolkit documentation managed by install_mail.py\n')
         (staging / '.icloud-utils-mail').write_text('Managed by install_mail.py\n')
-        subprocess.run([interpreter(), '-B', str(staging / 'icloud_mail.py'), '--version'],
+        subprocess.run([python, '-B', str(staging / 'icloud_mail.py'), '--version'],
                        check=True, capture_output=True, timeout=10)
         if documentation.exists():
             doc_migration = toolkit / 'migration' / stamp
@@ -135,15 +113,9 @@ def install(home, config=None, skills_dir=None, himalaya='himalaya', himalaya_co
             config.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             atomic_text(config, text, 0o600)
         launcher = '#!/bin/sh\n' + MARKER + '\nexec ' + ' '.join(shlex.quote(value) for value in
-                   [interpreter(), '-B', str(runtime / 'icloud_mail.py'), '--config', str(config)]) + ' "$@"\n'
+                   [python, '-B', str(runtime / 'icloud_mail.py'), '--config', str(config)]) + ' "$@"\n'
         atomic_text(canonical, launcher, 0o755)
-        temporary = alias.with_name(f'.icmail-{os.getpid()}')
-        try:
-            temporary.symlink_to('icloud-mail')
-            os.replace(temporary, alias)
-        finally:
-            if os.path.lexists(temporary):
-                temporary.unlink()
+        install_alias(alias, canonical)
         if skills_dir:
             skills_dir.mkdir(parents=True, exist_ok=True)
             for skill in skill_sources:

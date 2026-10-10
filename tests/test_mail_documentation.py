@@ -2,16 +2,13 @@
 import json
 from pathlib import Path
 import re
-import sys
 import tempfile
 import tomllib
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from support import ROOT
 from icloud_mail import Config
 from support.documentation import local_link_errors
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class MailDocumentationTests(unittest.TestCase):

@@ -1,17 +1,14 @@
 """Check the actual Restic policy against independent calendar expectations."""
 import datetime as dt
 import json
-from pathlib import Path
-import sys
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_backup import Fixture, RESTIC
+from support.backup import BackupFixture, RESTIC
 import icloud_backup as ib
 
 
 @unittest.skipUnless(RESTIC, 'Restic executable required')
-class CalendarRetention(Fixture):
+class CalendarRetention(BackupFixture):
     def test_14_daily_8_weekly_24_monthly_across_year_and_leap_boundaries(self):
         self.app.initialize()
         latest = dt.datetime(2026, 1, 10, 12, tzinfo=dt.UTC)
