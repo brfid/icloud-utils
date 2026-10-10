@@ -20,6 +20,7 @@ The commands share source and documentation, not a runtime. The Swift materializ
 | Restore without this installation | [RECOVERY.txt](RECOVERY.txt) |
 | Diagnose a failure | [Troubleshooting](docs/troubleshooting.md) |
 | Understand the design and guarantees | [Architecture](docs/architecture.md), [storage decision](docs/adr-001-storage.md), [materializer decision](docs/adr-002-materializer.md), and [request-ahead decision](docs/adr-003-download-ahead.md) |
+| Review proposed Himalaya mail integration | [Mail integration proposal](docs/adr-004-mail.md) |
 | Review test coverage or release readiness | [Validation](docs/validation.md) |
 | Change the project as a coding agent | [AGENTS.md](AGENTS.md) |
 

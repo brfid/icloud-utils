@@ -4,6 +4,8 @@ The toolkit keeps backup storage, arbitrary-path materialization, installation, 
 
 The [storage decision](adr-001-storage.md), [materializer decision](adr-002-materializer.md), and [request-ahead decision](adr-003-download-ahead.md) record why the major choices were made. This document owns current component boundaries and integrity guarantees. [Operations](operations.md) owns procedures, while [Validation](validation.md) owns test coverage and release readiness.
 
+The [mail integration proposal](adr-004-mail.md) describes an optional future companion.
+
 ## Design rules
 
 - Restic owns snapshot storage, repository integrity, and retention. The Python runner coordinates it but does not reproduce its storage engine.
