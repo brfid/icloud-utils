@@ -1,0 +1,8 @@
+# Toolkit routing only. Keep the real file outside the repository.
+# Account identity/authentication remain in the private Himalaya configuration.
+[mail]
+account = "icloud"
+himalaya = "himalaya"
+himalaya_config = "~/.config/himalaya/config.toml"
+state_dir = "~/Library/Application Support/icloud-utils/mail/state"
+timeout_seconds = 30

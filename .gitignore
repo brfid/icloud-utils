@@ -12,6 +12,9 @@ config-at-install.toml
 /restic-v2/
 /restic-v2-recovery/
 state.json
+reviews.json
+mail.toml
+/mail-private/
 *.log
 .env
 .env.*

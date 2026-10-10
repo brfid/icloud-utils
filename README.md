@@ -1,13 +1,14 @@
 # iCloud Utils
 
-This repository contains two small, independent macOS tools:
+This repository contains three small, independent macOS tools:
 
 | Tool | Short command | Responsibility |
 | --- | --- | --- |
 | `icloud-backup` | `icback` | Incremental backups of configured folders through Restic, with local integrity checks, retention safeguards, scheduling, and an independent watchdog |
 | `icloud-materialize` | `icmat` | Metadata-only inspection or bounded iCloud materialization and complete local reads for explicitly named paths |
+| `icloud-mail` | `icmail` | Read-only Himalaya mail access, connection diagnostics, and private per-message review tracking |
 
-The commands share source and documentation, not a runtime. The Swift materializer needs no Python, Restic, backup configuration, or scheduled job. The Python backup remains usable when the materializer is absent.
+The commands share source and documentation, not a runtime. The Swift materializer needs no Python, Restic, backup configuration, or scheduled job. The Python backup remains usable when the materializer is absent. Mail is an optional Python/Himalaya companion that reuses private account configuration and credential providers; neither of the other tools depends on it.
 
 ## Start here
 
@@ -20,7 +21,7 @@ The commands share source and documentation, not a runtime. The Swift materializ
 | Restore without this installation | [RECOVERY.txt](RECOVERY.txt) |
 | Diagnose a failure | [Troubleshooting](docs/troubleshooting.md) |
 | Understand the design and guarantees | [Architecture](docs/architecture.md), [storage decision](docs/adr-001-storage.md), [materializer decision](docs/adr-002-materializer.md), and [request-ahead decision](docs/adr-003-download-ahead.md) |
-| Review proposed Himalaya mail integration | [Mail integration proposal](docs/adr-004-mail.md) |
+| Install or use Himalaya mail tooling | [Mail setup, commands, and review contract](docs/mail.md) |
 | Review test coverage or release readiness | [Validation](docs/validation.md) |
 | Change the project as a coding agent | [AGENTS.md](AGENTS.md) |
 
@@ -42,6 +43,16 @@ icback materialize fetch --verbose -- /explicit/path
 
 Read the [materializer contract](docs/materializer.md) before treating a result as evidence of readability or synchronization.
 
+## Install the mail companion
+
+```sh
+scripts/install-mail --himalaya /opt/homebrew/bin/himalaya --skills-dir "$HOME/.codex/skills"
+~/bin/icmail --json doctor
+~/bin/icmail --json list --mailbox INBOX --page-size 20
+```
+
+Use an existing Himalaya 2.1.0 IMAP account. Account identity and credentials remain in its private configuration and credential provider. The installer creates only toolkit routing when absent and can deploy the repository-owned mail and toolkit skills. See [Mail](docs/mail.md) for installation/update boundaries, safe reads, and explicit review acknowledgments.
+
 ## Create a new backup installation
 
 This project uses Restic's **empty-password mode**. There is no separate recovery secret; anyone with the complete backup store can recover its contents. Privacy therefore depends on Mac and iCloud access controls. Backup success establishes local creation and checking, not completed iCloud upload.
@@ -61,6 +72,6 @@ Installation copies the backup programs to stable locations, installs `icloud-ba
 
 ## Develop and verify
 
-`make test` builds the Swift command and runs disposable materializer, backup, retention, wrapper, alias, and installation tests. Release and platform limits are recorded in [Validation](docs/validation.md). No private configuration, backup store, archive data, machine logs, or generated build caches belong in this repository.
+`make test` builds the Swift command and runs disposable materializer, backup, retention, wrapper, alias, mail-adapter, review-state, and installation tests. `make test-mail` runs the isolated mail suite without Swift or Restic. Release and platform limits are recorded in [Validation](docs/validation.md). No private configuration, backup store, archive data, machine logs, or generated build caches belong in this repository.
 
 The project is [MIT licensed](LICENSE).

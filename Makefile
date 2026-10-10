@@ -3,7 +3,7 @@ SWIFT_SCRATCH ?= /tmp/icloud-utils-swift-build
 SWIFT_ENV = SDKROOT=$(SWIFT_SDK) CLANG_MODULE_CACHE_PATH=/tmp/icloud-utils-clang-cache SWIFTPM_MODULECACHE_OVERRIDE=/tmp/icloud-utils-swiftpm-cache
 SWIFT = $(SWIFT_ENV) swift
 
-.PHONY: build test release checksum fixture-helper install-materializer uninstall-materializer
+.PHONY: build test release checksum fixture-helper install-materializer uninstall-materializer test-mail install-mail
 
 build:
 	$(SWIFT) build --disable-sandbox --sdk $(SWIFT_SDK) --scratch-path $(SWIFT_SCRATCH)
@@ -26,3 +26,9 @@ install-materializer: release
 
 uninstall-materializer:
 	scripts/install-materializer --uninstall
+
+test-mail:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mail*.py' -v
+
+install-mail:
+	scripts/install-mail

@@ -1,14 +1,14 @@
 ---
 name: icloud-utils
-description: Check or materialize explicitly named macOS iCloud paths with icmat, or route the same operation through icloud-backup, while interpreting incomplete results conservatively.
+description: Install, update, or diagnose the iCloud Utils toolkit and its independently installed backup, materializer, and Himalaya mail components. Use for toolkit management; ordinary inbox or explicitly named file tasks use the relevant component workflow.
 ---
 
 # iCloud Utils
 
-Use `icmat check --json -- PATH...` for a metadata-only inventory. It disables automatic materialization, makes no download request, and does not read payloads. A successful check can list data-less files; never describe it as byte verification.
+The repository owns portable code, operating contracts, and agent instructions. Live routing, account identity, credential providers, review state, and backup configuration remain private outside Git. The installed tools run independently of the checkout and each other.
 
-Use `icmat fetch --json --sha256 -- PATH...` only when the user wants complete local reads/materialization. It rereads already-local regular files, can consume network, disk, time, and iCloud activity, and requires enough immediately free capacity beyond its reserve. Do not broaden explicit paths, pass `--allow-icloud-root`, evict files, or modify archive contents without direct authorization.
+Read [Operations](../../docs/operations.md) to discover installed paths before an update. Backup deployment preserves the discovered configuration and job labels; mail installation is separate and never changes backup jobs. Use [Architecture](../../docs/architecture.md) for component boundaries and [Mail](../../docs/mail.md) for the Himalaya companion, credential separation, and local review tracking. Change source-owned skills here and deploy them with the documented installer rather than editing generated installed copies.
 
-Treat `success: false`, `enumerationComplete: false`, any failure, timeout, unstable inventory, unreadable file, or remaining data-less candidate as incomplete. Keep local readability separate from `freshness`: stale or unknown status is not synchronized success. Hashes record bytes read only; compare them with an independent expected digest to establish a match.
+For explicitly named iCloud Drive paths, use `icmat check --json -- PATH...` for metadata only or `icmat fetch --json -- PATH...` for complete local reads. Add `--sha256` only when a digest is requested. Preserve exact scope and keep local readability separate from synchronization status. Consult [the materializer contract](../../docs/materializer.md) for incomplete results and resource limits.
 
-`icloud-backup materialize check|fetch ...` is a thin route to the installed native companion. Do not use the backup-specific `download` command for arbitrary paths; it verifies only the configured Restic repository.
+For mail, use `icmail --json` with an explicit mailbox. Read full messages without changing unread state; acknowledge review receipts only after the review is complete. Setup, commands, and actionable-alert guidance live in [the mail contract](../../docs/mail.md) and the source-owned mail skill.

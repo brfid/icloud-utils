@@ -1,16 +1,17 @@
 # Architecture
 
-The toolkit keeps backup storage, arbitrary-path materialization, installation, and health reporting as separate responsibilities. Sharing a repository does not make either command a dependency of the other.
+The toolkit keeps backup storage, arbitrary-path materialization, mail access/review tracking, installation, and health reporting as separate responsibilities. Sharing a repository does not make the commands dependencies of each other.
 
 The [storage decision](adr-001-storage.md), [materializer decision](adr-002-materializer.md), and [request-ahead decision](adr-003-download-ahead.md) record why the major choices were made. This document owns current component boundaries and integrity guarantees. [Operations](operations.md) owns procedures, while [Validation](validation.md) owns test coverage and release readiness.
 
-The [mail integration proposal](adr-004-mail.md) describes an optional future companion.
+The [mail decision](adr-004-mail.md) defines the optional Himalaya companion. [Mail](mail.md) owns its configuration, operations, read-only command surface, and local review contract.
 
 ## Design rules
 
 - Restic owns snapshot storage, repository integrity, and retention. The Python runner coordinates it but does not reproduce its storage engine.
 - `icloud-materialize` owns arbitrary-path metadata inspection and complete local reads. It does not acquire backup configuration, scheduling, retention, or recovery responsibilities.
 - The installed backup runner, materializer, and watchdog must still expose useful failure information when either of the other programs is missing or broken.
+- Himalaya owns mail protocols, MIME, and account authentication. The mail adapter owns allowlisted read operations and private per-message review acknowledgments; fetching is distinct from review.
 - Each documentation subject has one owner. Entry points summarize enough to choose a workflow and link to the detailed contract or procedure.
 
 ## Responsibilities
@@ -26,6 +27,8 @@ The [mail integration proposal](adr-004-mail.md) describes an optional future co
 | `icloud-materialize`: worker operations | Bounded inventory passes, check/fetch success conditions, and per-root result assembly | Final multi-root aggregation to the parent |
 | `icloud_backup.py`: `Config` / `load_config` | Validated private configuration and path boundaries | Installation layout to the installer |
 | `icloud_backup.py`: `App` | Backup lifecycle, completion state, local locks, engine guards, source health, and safe restore targets | Storage, snapshot selection, verification, and calendar retention to Restic |
+| `icloud_mail.py` | Bounded read-only mail commands, version/result checks, stable IMAP receipt identity, and atomic private review state | Protocols, MIME, attachment retrieval, and credentials to Himalaya |
+| `install_mail.py` | Independent mail runtime/shortcut, private routing creation, source-owned skill deployment, and private migration copies | Mail behavior to the deployed adapter; account configuration remains external |
 | `install.py` | Stable runtime/shortcut, generated launchd jobs, deployment metadata, migration copies, and recovery export | Backup execution to the installed runner |
 | `watch.py` | Independent supervision of `status --json` and fallback alerts | Health rules to the runner while it can run |
 | Restic | Content reuse, compression, internal repository format, snapshots, integrity checks, restore, and retention | Remote file synchronization to iCloud Drive |

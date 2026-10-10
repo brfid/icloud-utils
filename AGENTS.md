@@ -16,6 +16,12 @@ Edit code here, then use the documented installer when deployment is part of the
 
 Keep machine inventories, private configuration, status output, logs, recovery copies, materializer result files, restored data, and publication-review notes outside Git. Do not copy them into these instructions. `.gitignore` reduces accidental additions; it does not sanitize tracked files or history. Changing repository visibility or rewriting existing history requires an explicit user request.
 
+## Mail source and credentials
+
+[Mail](docs/mail.md) owns the mail companion contract, setup, and review-state semantics. Himalaya owns account identity and authentication; credentials stay in the private account configuration/credential provider and never enter this repository or generated toolkit state. The toolkit mail configuration stores routing only. Preserve existing account configuration, preferred sender alias, and working credential commands during deployment.
+
+The source-owned `skills/icloud-mail` and `skills/icloud-utils` instructions are deployed by `scripts/install-mail --skills-dir ...`; update them here and regenerate installed copies. Do not maintain a separate editable mail manual in a global skill. The adapter must retain its allowlisted read surface, stable account/mailbox/UIDVALIDITY/UID identity, and explicit review acknowledgment. A fetched message or envelope page is not completed review or exhaustive mailbox coverage. Keep mail installation/state independent of backup jobs.
+
 ## Maintain the boundaries
 
 Follow [the component responsibilities and invariants](docs/architecture.md). Let Restic own storage and retention. Keep the watchdog independent of imports from the runner so it can report a missing or broken runner; its small fallback notification/file-writing code is intentional duplication.

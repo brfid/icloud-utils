@@ -16,6 +16,10 @@ The backup tests use temporary data and real empty-password Restic repositories.
 
 Installation tests cover configuration selection, schedule wiring, command aliases, the watchdog's missing-runner path, and an installed runtime after its fixture checkout is removed. Materializer tests cover scope resolution, metadata inventory, complete reads with hashing off by default, optional hashing, bounded request-ahead order and limits, stability, timeouts, interruptions, special files, legacy placeholders, installers, and injected failures. Unsafe failure injection and request-order tracing are compiled only into debug builds.
 
+Mail coverage can run independently with `make test-mail`, without Swift or Restic. Its 16 checks use a disposable Himalaya process and private temporary account/routing files. They exercise the read-only argument boundary, explicit review acknowledgments, pending-action resolution, account and UIDVALIDITY isolation, mid-read identity changes, corrupt state, failed authentication despite exit zero, withheld private error streams, timeout/signal child cleanup, attachment destinations/partial results, owner-only state-directory handling, and installation/update after moving the fixture checkout. Installation preserves the private Himalaya configuration and existing toolkit routing.
+
+The source-owned mail and toolkit skills also pass the skill validator, and their local links are checked. The mail adapter is tested against the explicitly supported Himalaya 2.1.0 JSON/CLI contract; fake-process tests alone do not establish server behavior.
+
 These tests use disposable paths. They do not operate on the configured production backup store.
 
 ## Real iCloud acceptance
@@ -29,6 +33,12 @@ For request-ahead acceptance, compare release-binary `--download-ahead 1` and `4
 On 2026-09-16, three pairs of disposable fixtures each had 12 uploaded files evicted and confirmed `SF_DATALESS` before the release-binary run. Window `1` took 11.550, 11.155, and 11.112 seconds; window `4` took 2.979, 3.177, and 3.479 seconds. The medians were 11.155 and 3.177 seconds, a 71.5% reduction. All six runs verified all 12 files with hashing off, cleared the data-less flags, matched independent pre-eviction hashes afterward, and made no new requests on rerun. These measurements support default `4` for this tested fixture and machine; they do not guarantee the same improvement for other trees or iCloud conditions.
 
 Backup acceptance has exercised native eviction, incremental capture, deleted-file recovery, full checking, prune, cloud-only source reads, a scheduled capture, and separate verified restores. Those observations establish the tested local paths, not a remote transactional guarantee.
+
+## Bounded live mail acceptance
+
+On 2026-10-09, the combined toolkit suite and final focused mail checks passed. A bounded live acceptance with Himalaya 2.1.0 verified IMAP authentication, mailbox enumeration, one inbox envelope page, a full raw-message read, and attachment metadata. Message flags before and after the read were unchanged. The fetched receipt remained unreviewed; no review acknowledgment or mail mutation was issued. The acceptance used isolated private review state rather than advancing an operational review ledger.
+
+This establishes the exercised account and command paths, not exhaustive mailbox coverage, every provider behavior, unsupported Himalaya releases, or an AI review judgment. Attachment downloads and failure injection are covered with disposable fixtures; the live check did not download attachments or change credentials. Private account details, message data, and acceptance output remain outside Git.
 
 ## Tested platform boundary
 

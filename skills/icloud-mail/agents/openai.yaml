@@ -1,0 +1,3 @@
+interface:
+  display_name: "iCloud Mail"
+  short_description: "Read iCloud Mail with the iCloud Utils companion"

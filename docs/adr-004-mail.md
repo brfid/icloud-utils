@@ -1,50 +1,32 @@
 # ADR-004: Optional Himalaya mail tooling
 
-**Status:** Proposed
+**Status:** Accepted
 
 **Date:** 2026-10-09
 
-**Decider:** Project owner
-
 ## Context
 
-The project owner wants iCloud Utils to include the existing Himalaya mail workflow as part of an integrated toolkit. The repository currently packages backup and materialization as independently installed tools. A mail companion would give portable setup, operations, and review instructions an authoritative project home while preserving that independence.
+The project owner wants the existing Himalaya mail workflow included in iCloud Utils, with portable tooling and agent instructions published in the public repository and working private configuration updated locally. The toolkit already packages independently installed backup and materialization tools. Credentials and account identity must remain separate from the repository.
 
-## Proposed decision
+## Decision
 
-Add an independently installable `icloud-mail` companion that delegates mail protocol operations to an external, released Himalaya binary. Keep Himalaya responsible for IMAP, MIME, attachments, and account authentication. Reuse its selected private configuration and existing credential command; do not create another account configuration or copy credentials into toolkit state.
+Add `icloud-mail` (`icmail`) as an optional Python companion that delegates protocols, MIME, attachment retrieval, and authentication to external Himalaya. Initially support the inspected 2.1.0 command/JSON contract explicitly. Reuse the selected private Himalaya account and its credential provider. Toolkit configuration stores routing and limits only.
 
-Integrate component discovery, installation instructions, diagnostics, and agent guidance at the toolkit level. Mail installation is optional. Missing Himalaya, failed authentication, or a mail-review failure must not prevent backup or materialization from running. Start with a small companion and the existing commands; a new umbrella dispatcher is a later interface choice, not a prerequisite.
+The adapter exposes bounded listing/search, full reads preserving seen state, selected attachment downloads to new directories, connection diagnostics, and local review acknowledgments. Construct allowlisted commands without shell execution or unrestricted argument forwarding. Sending, moves, deletion, and flag changes are outside this interface.
 
-The first mail interface should support account diagnostics, bounded mailbox listing/search, message reads that preserve seen flags, and explicitly requested attachment downloads. Use structured Himalaya output and an allowlist of supported operations and arguments. Do not expose arbitrary protocol commands or unrestricted argument forwarding through a supposedly read-only interface. Sending, moving, deleting, or changing flags would require a separately designed and authorized capability.
+Keep retrieval separate from review. Store per-message metadata receipts using an account namespace, canonical mailbox, UIDVALIDITY, and UID. Acknowledge only through an explicit reviewer operation; retain unreviewed receipts and unresolved actions. Do not claim complete mailbox coverage or introduce an arrival watermark based on author-supplied dates. This conservative per-message contract avoids falsely completing a partial review.
 
-Keep message retrieval distinct from review. Local code can collect and track messages without an AI runtime. The existing actionable-alert workflow can use those results through an optional agent, with its policy and prompt owned in project source. Fetching a body or listing headers does not establish that a message was reviewed. Persist review coverage only after successful review acknowledgment, retain incomplete work for retry, and distinguish connection failure from a quiet successful review. Specify stable account/mailbox/message identity and mailbox-reset handling before implementing incremental coverage.
+Own portable mail instructions in [Mail](mail.md) and the repository's mail/toolkit skills. Deploy generated skills and documentation through the independent installer. Keep installed programs usable without the checkout, and keep mail configuration/state/dependencies independent of backup and materializer jobs. Existing schedulers remain private and are not recreated by installation. AI review is optional.
 
-Account identities, credentials, bodies, attachments, review state, logs, and machine-specific schedules remain private and outside Git. Keep mail state and scheduling independent of backup state and jobs. Portable mail setup and operating instructions should have one project owner document; installed agent guidance should link to or be deployed from that source rather than becoming a second editable manual.
+## Options and consequences
 
-## Options considered
+A separate global skill requires less project code but leaves workflow ownership outside the toolkit. A thin companion provides consistent discovery, setup, diagnostics, and review evidence with a small adapter to maintain. Bundling/forking Himalaya or merging mail into the backup runner adds upstream maintenance and couples unrelated failure paths. Use the thin companion.
 
-| Option | Benefit | Cost or limitation |
-| --- | --- | --- |
-| Retain a separate Himalaya skill and workflow | Least new code | Setup and review instructions remain outside the toolkit's source and release process |
-| Add an optional thin Himalaya companion | Integrated discovery and reproducible workflow while retaining independent tools | Maintain a small adapter, private review-state contract, and compatibility tests |
-| Bundle or fork Himalaya, or merge mail into the backup runner | One larger implementation surface | Adds upstream maintenance and couples unrelated dependencies and failure paths |
-
-The thin companion is recommended. Its value should come from workflow guarantees, diagnostics, and reproducible setup rather than merely renaming every Himalaya command.
-
-## Consequences and implementation boundary
-
-Himalaya upgrades require compatibility checks for command syntax, JSON results, account-check error handling, sorting, and unread-state preservation. The initially inspected release is 2.1.0; this proposal does not claim compatibility with every 2.x version. Test supported behavior before widening the version range.
-
-This is a proposed design only. It does not implement or deploy mail tooling, change account configuration, or create or migrate a schedule.
-
-## Next step and acceptance
-
-Agree the first companion interface and the owner of review acknowledgment, then implement the smallest useful command set, opt-in installation, and canonical mail documentation/agent guidance. Verify read-state preservation, partial retrieval/review recovery, backend failures represented in JSON, and independence from the other toolkit commands. Use disposable fixtures for failure tests and bounded, non-mutating live acceptance where needed.
+Himalaya upgrades require contract testing before widening the supported version. Private routing, bodies, attachments, review notes, credential material, and machine inventories stay outside Git. Installation preserves existing routing and working authentication rather than creating another credential store. [Validation](validation.md) owns tested behavior and acceptance limits.
 
 ## Evidence
 
-- [Current toolkit boundaries](architecture.md) and [independent companion precedent](adr-002-materializer.md).
-- [Himalaya 2.1.0 documentation](https://github.com/pimalaya/himalaya/blob/v2.1.0/README.md) documents JSON output and shared private account configuration.
-- [Himalaya 2.1.0 iCloud test report](https://github.com/pimalaya/himalaya/blob/v2.1.0/cairn/spec/testing/imap-icloud.md) records non-mutating message reads and the iCloud sorting workaround. Installed `message read --help` independently confirms that seen state is unchanged when `--seen` is omitted; this is documentation evidence, not a new live mailbox acceptance run.
-- [Apple app-specific passwords](https://support.apple.com/en-us/102654) owns the account authentication requirements; Himalaya consumes the configured credential command.
+- [Existing independent companion precedent](adr-002-materializer.md).
+- [Himalaya 2.1.0 documentation](https://github.com/pimalaya/himalaya/blob/v2.1.0/README.md) and [iCloud test report](https://github.com/pimalaya/himalaya/blob/v2.1.0/cairn/spec/testing/imap-icloud.md).
+- [IMAP identity rules](https://www.rfc-editor.org/rfc/rfc9051.html#section-2.3.1.1).
+- [Apple app-specific password requirements](https://support.apple.com/en-us/102654).
