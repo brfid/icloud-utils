@@ -1,5 +1,6 @@
 # Toolkit routing only. Keep the real file outside the repository.
 # Account identity/authentication remain in the private Himalaya configuration.
+# See example.himalaya.toml and docs/mail.md for first-time account setup.
 [mail]
 account = "icloud"
 himalaya = "himalaya"

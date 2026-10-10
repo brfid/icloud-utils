@@ -23,7 +23,7 @@ Inspect each installed component independently:
 | Materializer | `~/bin/icmat --version` | Installed executable version; paths and options are supplied per invocation |
 | Mail | `~/bin/icmail --json status` | Private routing, backend compatibility, documentation location, and review state; no network |
 
-Mail connection/authentication checks use `icmail --json doctor`; follow [Mail operations](mail.md#install-and-update) for its update procedure. Neither the materializer nor the mail installer creates or reloads backup jobs.
+Mail status reports its selected toolkit `configuration`, `himalayaConfig`, and `stateDirectory`; connection/authentication checks use `icmail --json doctor`. Follow [Mail operations](mail.md#install-and-update) for updates or [first-time setup](mail.md#setup-and-credentials) for a new account. Neither the materializer nor the mail installer creates or reloads backup jobs.
 
 ### Backup installation details
 

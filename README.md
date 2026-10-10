@@ -18,7 +18,7 @@ The commands share source and documentation, not a runtime. The Swift materializ
 | Create a backup installation | [Create a new backup installation](#create-a-new-backup-installation) |
 | Find or update an existing installation | [Operations](docs/operations.md) |
 | Configure backup sources, exclusions, retention, or runtime limits | [Backup configuration](docs/configuration.md) and [example.config.toml](example.config.toml) |
-| Configure mail routing and external credentials | [Mail setup and credential ownership](docs/mail.md#setup-and-credentials) and [example.mail.toml](example.mail.toml) |
+| Configure a first Himalaya account, credentials, or toolkit routing | [Mail setup and credential ownership](docs/mail.md#setup-and-credentials), [Himalaya example](example.himalaya.toml), and [routing example](example.mail.toml) |
 | Restore without this installation | [RECOVERY.txt](RECOVERY.txt) |
 | Diagnose a failure | [Troubleshooting](docs/troubleshooting.md) |
 | Understand the design and guarantees | [Architecture](docs/architecture.md), [storage decision](docs/adr-001-storage.md), [materializer decision](docs/adr-002-materializer.md), [request-ahead decision](docs/adr-003-download-ahead.md), and [mail decision](docs/adr-004-mail.md) |
@@ -47,13 +47,13 @@ Read the [materializer contract](docs/materializer.md) before treating a result 
 ## Install the mail companion
 
 ```sh
-scripts/install-mail --himalaya /opt/homebrew/bin/himalaya --skills-dir "$HOME/.codex/skills"
+scripts/install-mail --himalaya "$(command -v himalaya)" --skills-dir "$HOME/.codex/skills"
 ~/bin/icmail --json status
 ~/bin/icmail --json doctor
 ~/bin/icmail --json list --mailbox INBOX --page-size 20
 ```
 
-Use an existing Himalaya 2.1.0 IMAP account. Account identity and credentials remain in its private configuration and credential provider. The installer creates only toolkit routing when absent and can deploy the repository-owned mail and toolkit skills. See [Mail](docs/mail.md) for installation/update boundaries, safe reads, and explicit review acknowledgments.
+First configure and verify a Himalaya 2.1.0 IMAP account using [Mail setup](docs/mail.md#setup-and-credentials), or retain an existing working account. Account identity and credentials remain in its private configuration and credential provider. The installer creates only toolkit routing when absent and can deploy the repository-owned mail and toolkit skills. [Mail](docs/mail.md) owns permissions, troubleshooting, migration, safe reads, and explicit review acknowledgments.
 
 ## Create a new backup installation
 

@@ -18,7 +18,7 @@ import tempfile
 from icloud_mail import Config, Failure
 
 MARKER = '# icloud-utils mail launcher'
-DOCUMENTATION_FILES = ('README.md', 'AGENTS.md', 'RECOVERY.txt', 'LICENSE', 'example.config.toml', 'example.mail.toml')
+DOCUMENTATION_FILES = ('README.md', 'AGENTS.md', 'RECOVERY.txt', 'LICENSE', 'example.config.toml', 'example.mail.toml', 'example.himalaya.toml')
 
 
 def atomic_text(path, text, mode):

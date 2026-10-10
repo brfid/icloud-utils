@@ -14,11 +14,94 @@ There are three separate owners:
 
 Keep the real configuration, identities, passwords, Keychain exports, bodies, attachments, review notes, and machine state outside Git. The adapter does not copy the Himalaya configuration or execute its password command itself. Himalaya consumes that command internally. Repository publication does not publish local configuration.
 
-Install Himalaya through your normal package manager and retain the supported release. Consult [Himalaya's versioned documentation](https://github.com/pimalaya/himalaya/blob/v2.1.0/README.md) when configuring an account. For iCloud IMAP, the account needs `imap.server = "imaps://imap.mail.me.com:993"`, `imap.sort.fallback = true`, and an explicit inbox alias such as `mailbox.alias.inbox = "INBOX"`. The adapter currently supports IMAP accounts with `imap.sasl.plain.username`. The preferred sending alias in `email` may differ from that login.
+If Himalaya already works, use [migration](#migration-and-rollback) before installing; keep the working account and credential command. For a new account, complete the following steps from this checkout. The examples use placeholder identities and home-relative paths; they contain no personal configuration. The toolkit currently supports IMAP accounts using `imap.sasl.plain.username`.
 
-Keep the password in a local credential provider. For macOS Keychain, retain or create a generic-password item for the primary mailbox login using a service such as `himalaya-icloud`, and configure `imap.sasl.plain.password.command` to invoke `/usr/bin/security find-generic-password -a PRIMARY-ADDRESS -s himalaya-icloud -w`. Let Himalaya consume the output; never print or log it. When deliberately creating an item, `security add-generic-password -a PRIMARY-ADDRESS -s himalaya-icloud -w` prompts for the password when `-w` is last. Apple owns [app-specific password creation and revocation](https://support.apple.com/en-us/102654). Existing working credentials need no migration.
+### 1. Install and check prerequisites
 
-Keep the live Himalaya directory owner-only and its configuration mode `0600`. Never replace an existing multi-account configuration with an example. The iCloud sort fallback is required because the provider advertises server sorting but can return incorrectly ordered results; see [the upstream iCloud report](https://github.com/pimalaya/himalaya/blob/v2.1.0/cairn/spec/testing/imap-icloud.md).
+Use Python 3.11 or later and Himalaya 2.1.0 with IMAP support. Restic, Swift, and SMTP are unnecessary for mail. Homebrew is one installation option:
+
+```sh
+brew install python himalaya
+python3 --version
+himalaya --version
+command -v himalaya
+```
+
+Confirm the reported Himalaya version is **2.1.0**. A package manager may supply a newer release; use a known supported binary from [the upstream 2.1.0 release](https://github.com/pimalaya/himalaya/releases/tag/v2.1.0) in that case. An automatic package upgrade does not widen the adapter's support. See [the versioned upstream guide](https://github.com/pimalaya/himalaya/blob/v2.1.0/README.md) for other installation methods. Use the discovered executable path when installing, so Apple silicon and Intel Homebrew prefixes both work.
+
+### 2. Create the private account configuration
+
+For a first installation, prepare dedicated private directories and copy the [Himalaya example](../example.himalaya.toml) without overwriting an existing file:
+
+```sh
+umask 077
+mkdir -p "$HOME/.config/himalaya" "$HOME/.config/icloud-utils"
+chmod 700 "$HOME/.config/himalaya" "$HOME/.config/icloud-utils"
+(set -C; cat example.himalaya.toml > "$HOME/.config/himalaya/config.toml")
+chmod 600 "$HOME/.config/himalaya/config.toml"
+```
+
+If the copy refuses an existing file, stop and merge only the selected account table using [migration](#migration-and-rollback). Edit the private copy, replacing `primary@example.invalid` with the mailbox's actual primary login and Keychain account label, and `preferred-alias@example.invalid` with your preferred sender identity. The account key `icloud` is a local routing name, not a login address. Keep it consistent with toolkit `mail.account`.
+
+The complete minimal account shape is:
+
+```toml
+[accounts.icloud]
+email = "preferred-alias@example.invalid"
+mailbox.alias.inbox = "INBOX"
+imap.server = "imaps://imap.mail.me.com:993"
+imap.sort.fallback = true
+imap.sasl.plain.username = "primary@example.invalid"
+imap.sasl.plain.password.command = ["/usr/bin/security", "find-generic-password", "-a", "primary@example.invalid", "-s", "himalaya-icloud", "-w"]
+```
+
+Apple specifies TLS IMAP on `imap.mail.me.com:993`; its [server settings](https://support.apple.com/en-us/102525) describe using the address's local part as the username and trying the full address if needed. Preserve a working login; the example uses the full-address form. The `email` sender alias may differ from that login. Inbox is explicit. Add other aliases only after enumerating actual mailbox names. Local sort fallback avoids iCloud's advertised but ineffective server sorting; see [the upstream iCloud report](https://github.com/pimalaya/himalaya/blob/v2.1.0/cairn/spec/testing/imap-icloud.md). The command-array credential syntax is documented in [Himalaya's versioned configuration sample](https://github.com/pimalaya/himalaya/blob/v2.1.0/config.sample.toml).
+
+### 3. Store an app-specific password in a credential provider
+
+For a new iCloud credential, enable Apple Account two-factor authentication, sign in at [account.apple.com](https://account.apple.com/), and choose **Sign-In and Security → App-Specific Passwords → Generate an app-specific password**. Follow [Apple's instructions](https://support.apple.com/en-us/102654); use that password instead of the primary Apple Account password.
+
+For macOS Keychain, create one generic-password item with the same account label and service as the example. Replace the placeholder label before running:
+
+```sh
+/usr/bin/security add-generic-password -a 'primary@example.invalid' -s himalaya-icloud -w
+```
+
+Leave `-w` last, with no password argument, to enter the secret at the hidden prompt. This behavior is documented by the local `man security`. Omit `-U` for creation so an existing item is not silently replaced. Never put the password in shell arguments, history, TOML, environment variables, logs, or Git. Let Himalaya consume the credential command's output; do not run its `find-generic-password ... -w` command for display.
+
+An existing credential provider needs no replacement. For an already configured password manager, use its executable and arguments in place of the Keychain array, for example `["pass", "show", "mail/icloud"]`. The provider must return only the secret on stdout and work under the user running Himalaya. Himalaya owns invocation; the adapter and installer do not execute that command themselves.
+
+Keep credential access limited to the intended local user. Review any Keychain permission prompt for the expected `/usr/bin/security` helper; do not grant all applications access with `-A`. A locked login keychain or a prompt that cannot be answered in a background session needs an interactive check before automation. This installer does not unlock keychains or change access policies.
+
+### 4. Verify Himalaya, then install toolkit routing
+
+Check the selected account directly once, with logging disabled:
+
+```sh
+himalaya --json --log-level off --config "$HOME/.config/himalaya/config.toml" \
+  --account icloud --backend imap account check
+```
+
+Require exactly the selected IMAP backend with `ok: true`; a zero exit status alone is insufficient. Keep diagnostics private and stop after rejected authentication to inspect the login, credential label/service, and Keychain access. Do not repeatedly retry an invalid password.
+
+Then follow [Install and update](#install-and-update). The installer creates routing from the specified account/backend paths only when its toolkit file is absent. [example.mail.toml](../example.mail.toml) is the portable routing reference; it is separate from the Himalaya account example. Existing toolkit routing takes precedence over creation flags.
+
+### 5. Verify the installed commands and private permissions
+
+```sh
+~/bin/icmail --json status
+~/bin/icmail --json doctor
+~/bin/icmail --json mailboxes
+~/bin/icmail --json list --mailbox INBOX --page 1 --page-size 5
+stat -f '%Sp %N' "$HOME/.config/himalaya" "$HOME/.config/himalaya/config.toml" \
+  "$HOME/.config/icloud-utils" "$HOME/.config/icloud-utils/mail.toml"
+```
+
+`status` should show the intended `configuration`, `himalayaConfig`, account, state directory, and an existing documentation file, with `networkChecked: false`. It checks the backend version locally without invoking its credential provider. `doctor` must return `success: true` after an actual IMAP authentication check. A mailbox page verifies access, not complete coverage. Private configuration directories should be `0700`, and files `0600`. For custom paths, inspect those actual paths. New review state is created privately on the first state-writing operation; an existing state directory or ledger with wider permissions is refused without a silent chmod.
+
+Optionally select one positive UID from that explicit mailbox page and run `icmail --json read --mailbox INBOX MESSAGE_UID`, replacing the placeholder. It returns the full raw message and an unreviewed local receipt while preserving unread state. Keep bodies and receipts private. Do not acknowledge a receipt merely to test setup; acknowledgment belongs to an actual completed review. Authentication and listing create no receipt.
+
+### Toolkit routing reference
 
 The toolkit routing settings are:
 
@@ -37,7 +120,9 @@ The portable [routing example](../example.mail.toml) contains no identity or cre
 From the source checkout:
 
 ```sh
-scripts/install-mail --himalaya /opt/homebrew/bin/himalaya --skills-dir "$HOME/.codex/skills"
+scripts/install-mail --config "$HOME/.config/icloud-utils/mail.toml" --account icloud \
+  --himalaya "$(command -v himalaya)" --himalaya-config "$HOME/.config/himalaya/config.toml" \
+  --skills-dir "$HOME/.codex/skills"
 ~/bin/icmail --json status
 ~/bin/icmail --json doctor
 ```
@@ -55,7 +140,44 @@ The installer creates a private toolkit configuration only if it is absent. For 
 | `~/Library/Application Support/icloud-utils/mail/state/` | Default private review ledger and lock |
 | `~/Library/Application Support/icloud-utils/mail/migration/` | Previous managed runtime, launchers, toolkit routing, and replaced skills |
 
-Code, documentation, and skills are updated from source. Review state and existing routing are preserved. Replacement/loading is not one transaction: a reported installation failure requires inspecting its private migration copies and rerunning with the same arguments. To roll back, install a retained known-good checkout while retaining the private routing and state. For removal, first stop any separately configured mail automation, then remove only the identified generated mail launcher/alias, runtime, and installed `icloud-mail` instructions. Retain the `icloud-utils` skill and toolkit documentation for the other components. Keep credentials, private routing, and review history unless their deletion is explicitly intended. Backup and materializer installations are independent.
+Code, documentation, and skills are updated from source. Review state and existing routing are preserved. Replacement/loading is not one transaction: a reported installation failure requires inspecting its private migration copies and rerunning with the same arguments. See [migration and rollback](#migration-and-rollback) before changing an existing installation. For removal, first stop any separately configured mail automation, then remove only the identified generated mail launcher/alias, runtime, and installed `icloud-mail` instructions. Retain the `icloud-utils` skill and toolkit documentation for the other components. Keep credentials, private routing, and review history unless their deletion is explicitly intended. Backup and materializer installations are independent.
+
+## Troubleshooting
+
+| Symptom or error stage | Check and next step |
+| --- | --- |
+| `dependency` or `compatibility` | Check the configured executable's `--version`; select Himalaya 2.1.0. Creation flags do not change an existing toolkit file; edit its `himalaya` routing deliberately. |
+| `configuration`, or unexpected selected paths | Inspect `status` and the generated launcher's `--config` argument if status fails. Toolkit routing has only `[mail]`; Himalaya has `[accounts.KEY]`. Check table shapes, account key, absolute/`~/` paths, `imap.sasl.plain.username`, aliases, and `imap.sort.fallback = true`. |
+| Installer cannot discover routing | Restore the missing selected file or rerun with its explicit `--config`. Do not accept a default file as evidence of the previous selection. |
+| `authentication`, including account check exit 0 | Inspect `backends[].ok`; confirm the primary login and matching credential account/service. Check app-specific password validity once. Primary Apple Account password changes revoke app-specific passwords; see [Apple](https://support.apple.com/en-us/102654). Rotate only the intended item when necessary. |
+| Keychain item missing or access denied | Check item metadata with `security find-generic-password -a 'primary@example.invalid' -s himalaya-icloud >/dev/null`, without `-w` or `-g`. Verify the current user's unlocked keychain and an interactive helper permission prompt. Do not export secrets or grant blanket access. |
+| `timeout` or `backend` | Check network/TLS reachability and the explicit account directly. Backend streams are withheld because they may contain private data. Do not paste trace logs into Git or assume a partial response completed review. |
+| `state` with wide permissions | Inspect the selected state directory and `reviews.json`; after confirming ownership, deliberately restrict the directory to `0700` and ledger to `0600`. The adapter does not repair existing permissions. |
+| Corrupt or incompatible ledger | Preserve the original file and its private recovery copies. Inspect schema/identity/outcome inconsistencies offline; do not delete/reset state to make the error disappear. Recover a known-good copy only after reconciling pending actions. |
+| `identity` after a mailbox change | Retrieve a fresh bounded page. UIDVALIDITY changes create distinct identities; never carry a token or UID across mailbox epochs or login/server changes. |
+| Search parse error or surprising results | Use a single quoted Himalaya DSL expression such as `subject invoice`, not bare free text. Dates use author headers; pages can shift during deliveries and are not a complete review watermark. |
+| Installed documentation link missing | Update from a complete checkout with the same routing and optional `--skills-dir`. Do not point toolkit references back into `mail/runtime`; the documentation tree is toolkit-owned. |
+
+## Migration and rollback
+
+For an existing Himalaya 2.1.0 account, retain the actual configuration path, account key, login, preferred `email` alias, and working credential command. Inspect locally rather than copying identity or secrets into the checkout. Merge missing inbox alias/sort-fallback settings into that selected account only, keeping all other accounts and any SMTP settings. An old pre-2.x schema needs deliberate conversion against [the versioned sample](https://github.com/pimalaya/himalaya/blob/v2.1.0/config.sample.toml); do not run a wizard over the working file or assume old keys still apply. Keep a private `0600` recovery copy before a manual edit, then repeat the direct IMAP check.
+
+For an installed companion, discover `configuration` and `stateDirectory` through `icmail --json status`. If it cannot run, inspect the generated launcher to find its selected toolkit path. Retain that routing file and review state, then run:
+
+```sh
+scripts/install-mail --config /absolute/path/to/existing/mail.toml --skills-dir "$HOME/.codex/skills"
+~/bin/icmail --json status
+~/bin/icmail --json doctor
+~/bin/icmail --json review status
+```
+
+Use the discovered path, not the placeholder. Subsequent updates may omit `--config` because the managed launcher preserves it. If an earlier installer already changed the selection, explicitly choose the intended retained file; discovery cannot reconstruct a lost choice. Existing credentials and review history need no conversion when account namespace and state directory stay the same. Renaming an account key alone retains the server/login namespace, but changing the login spelling or server changes receipt scope; do not rewrite old receipts to force a match.
+
+Updating an older companion moves its managed runtime/docs into private migration storage and creates the toolkit documentation tree. Supplying `--skills-dir` regenerates both skills against that tree and retains previous matching skills. Omit it only if no instruction update is intended. The installer does not read the Himalaya account file, modify credentials, or load backup jobs.
+
+For rollback, install a retained known-good source revision with the same explicit toolkit path and state directory. Inspect migration copies if installation failed partway; command, runtime, documentation, and skill replacement are individually atomic, not one transaction. Do not restore an older ledger over newer pending actions without reconciliation.
+
+Existing schedules and earlier review/coverage records are independently owned. This installer does not create, disable, or migrate a schedule, and it does not import historical coverage as acknowledged receipts. If a scheduler is deliberately migrated later, inspect its current command and policy, preserve pending obligations, verify the new read-only path, and switch the existing schedule without creating a duplicate. Changing credentials or schedules is a separate explicit operation.
 
 ## Commands
 

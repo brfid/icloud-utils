@@ -11,6 +11,8 @@ import tempfile
 import time
 import unittest
 
+from support.documentation import local_link_errors
+
 ROOT = Path(__file__).resolve().parents[1]
 
 FAKE = r'''#!/usr/bin/env python3
@@ -427,13 +429,7 @@ class MailInstallationTests(MailFixture, unittest.TestCase):
         return json.loads(result.stdout)
 
     def assert_local_links(self, paths):
-        for path in paths:
-            for target in re.findall(r'\[[^\]]*\]\(([^)]+)\)', path.read_text()):
-                if re.match(r'[a-zA-Z][a-zA-Z0-9+.-]*:', target):
-                    continue
-                filename = target.split('#', 1)[0]
-                self.assertTrue((path.parent / filename).is_file() if filename else path.is_file(),
-                                f'{path}: broken link {target}')
+        self.assertEqual(local_link_errors(paths), [])
 
     def test_custom_config_is_preserved_when_update_omits_config(self):
         home = self.directory / 'home with spaces'

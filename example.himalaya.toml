@@ -1,0 +1,17 @@
+# Himalaya 2.1.0 IMAP example, not toolkit routing or live configuration.
+# For an existing file, merge this account table instead of replacing the file.
+# Replace both placeholder addresses and the Keychain account label privately.
+[accounts.icloud]
+email = "preferred-alias@example.invalid"
+mailbox.alias.inbox = "INBOX"
+imap.server = "imaps://imap.mail.me.com:993"
+imap.sort.fallback = true
+imap.sasl.plain.username = "primary@example.invalid"
+imap.sasl.plain.password.command = [
+  "/usr/bin/security", "find-generic-password",
+  "-a", "primary@example.invalid", "-s", "himalaya-icloud", "-w",
+]
+
+# For an already configured password manager, replace the command above, e.g.:
+# imap.sasl.plain.password.command = ["pass", "show", "mail/icloud"]
+# Keep passwords out of this file. SMTP is unnecessary for the read-only adapter.

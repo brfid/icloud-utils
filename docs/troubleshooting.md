@@ -6,7 +6,7 @@ Start with the installed component:
 | --- | --- | --- |
 | Backup | `~/bin/icback status --json` | [Installation discovery](operations.md#identify-the-active-installation) and the backup cases below |
 | Materializer | `~/bin/icmat --version`, then inspect the result for the explicitly requested paths | [Options, statuses, and incomplete results](materializer.md#options-and-statuses) |
-| Mail | `~/bin/icmail --json status` for offline setup, then `~/bin/icmail --json doctor` for IMAP connectivity/authentication | [Setup and credential ownership](mail.md#setup-and-credentials) and [command contract](mail.md#commands) |
+| Mail | `~/bin/icmail --json status` for offline setup, then `~/bin/icmail --json doctor` for IMAP connectivity/authentication | [Mail troubleshooting](mail.md#troubleshooting), [first-time setup](mail.md#setup-and-credentials), and [migration](mail.md#migration-and-rollback) |
 
 For mail, confirm the explicitly supported Himalaya version and selected private routing before diagnosing authentication. Keep credentials in Himalaya's existing credential provider. A failed connection or message fetch never completes review; pending-action semantics belong to [the mail review contract](mail.md#review-receipts-and-actionable-checks).
 
