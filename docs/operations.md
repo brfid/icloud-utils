@@ -1,25 +1,33 @@
 # Operations
 
-Use this document for installation discovery, updates, normal commands, and alerts for the toolkit components. The backup configuration schema belongs to [configuration](configuration.md); materializer behavior belongs to [materializer](materializer.md); component mechanics belong to [architecture](architecture.md). Machine-specific status belongs in the private installation, not in repository documentation.
+Use this document for installation discovery and the backup and materializer operating procedures. [Mail](mail.md) owns mail installation, commands, external credentials, and private review state. The backup configuration schema belongs to [configuration](configuration.md); materializer behavior belongs to [materializer](materializer.md); component mechanics belong to [architecture](architecture.md). Machine-specific status belongs in the private installation, not in repository documentation.
 
 | Task | Go to |
 | --- | --- |
-| Find the active files, configuration, and job labels | [Identify the active installation](#identify-the-active-installation) |
+| Identify installed tools, configuration, and backup job labels | [Identify the active installation](#identify-the-active-installation) |
 | Update an installed backup without creating another store or job pair | [Update an existing backup installation](#update-an-existing-backup-installation) |
 | Install, update, roll back, or remove the materializer | [Install or remove the materializer](#install-or-remove-the-materializer) |
 | Install/update mail tooling and agent guidance, or inspect credentials/review state ownership | [Mail operations](mail.md#install-and-update) |
 | Run a backup, verification, download, or restore | [Commands and restoration](#commands-and-restoration) |
-| Understand scheduled runs and alerts | [Schedule and alerts](#schedule-and-alerts) |
+| Understand scheduled backup runs and alerts | [Schedule and alerts](#schedule-and-alerts) |
 | Diagnose cloud-only reads, permission prompts, JSON errors, or locks | [Troubleshooting](troubleshooting.md) |
 | Reconnect a store, migrate from the old archive, or stop the jobs | [Connect, migration, and stopping](#connect-migration-and-stopping) |
 
 ## Identify the active installation
 
-```sh
-~/bin/icloud-backup status --json
-```
+Inspect each installed component independently:
 
-Read `state.installation.config`, `program`, `watchdog`, `interpreter`, and `labels` in that output. They record the actual configuration path, installed files, Python command, and two job labels. The first label is the installer's base label. `state.sources` and the selected configuration describe actual coverage; do not infer it from the example. `version` identifies the invoked runner, while `state.installation.version` records the last installation.
+| Component | Local discovery command | What it establishes |
+| --- | --- | --- |
+| Backup | `~/bin/icback status --json` | Selected private configuration, installed runner, source coverage, and job health |
+| Materializer | `~/bin/icmat --version` | Installed executable version; paths and options are supplied per invocation |
+| Mail | `~/bin/icmail --json status` | Private routing, backend compatibility, documentation location, and review state; no network |
+
+Mail connection/authentication checks use `icmail --json doctor`; follow [Mail operations](mail.md#install-and-update) for its update procedure. Neither the materializer nor the mail installer creates or reloads backup jobs.
+
+### Backup installation details
+
+Read `state.installation.config`, `program`, `watchdog`, `interpreter`, and `labels` in the backup status output. They record the actual configuration path, installed files, Python command, and two job labels. The first label is the installer's base label. `state.sources` and the selected configuration describe actual coverage; do not infer it from the example. `version` identifies the invoked runner, while `state.installation.version` records the last installation.
 
 If the installed command or status is broken, inspect `~/bin/icloud-backup` and the matching `~/Library/LaunchAgents/*.plist` files for their explicit program/configuration arguments. The default private state file is under the support directory shown below, but a custom `runtime.state_dir` can move it. Discover the selected config before assuming that default. Do not replace the installation merely because the development checkout moved or disappeared.
 
@@ -40,7 +48,7 @@ If the installed command or status is broken, inspect `~/bin/icloud-backup` and 
 | `<dest_root>/restic-v2-recovery/` | Exported recovery guide and configuration copy, refreshed at installation |
 | `~/Library/Application Support/icloud-backup/migration/` | Private copies of replaced installation files for manual rollback |
 
-Defaults and configurable local paths are listed in [configuration](configuration.md#runtime-options). Editing installed copies directly is temporary: the next installation replaces them from the checkout. The cache and status files cannot replace the backup store, and the recovery configuration does not control scheduled backups.
+Backup defaults and configurable local paths are listed in [configuration](configuration.md#runtime-options). Editing installed copies directly is temporary: the next installation replaces them from the checkout. The cache and status files cannot replace the backup store, and the recovery configuration does not control scheduled backups.
 
 ## Update an existing backup installation
 
@@ -83,6 +91,8 @@ Uninstallation refuses files or aliases it cannot identify as its own. It does n
 
 ## Commands and restoration
 
+The following commands operate on the backup installation. For mail reads and local review acknowledgments, use the [mail command reference](mail.md#commands); standalone path operations use the [materializer contract](materializer.md#quick-start).
+
 | Command | Effect |
 | --- | --- |
 | `icloud-backup status` / `status --json` | Read local health and installed-job status; no backup-store data scan |
@@ -96,7 +106,7 @@ Uninstallation refuses files or aliases it cannot identify as its own. It does n
 | `icloud-backup materialize fetch ...` | Same thin dispatch for complete-read materialization; result and exit status come directly from the native command |
 | `icloud-backup watch` | Manual compatibility check with alerts; the scheduled independent watchdog is `watch.py` |
 
-`icback` and `icmat` are installed command symlinks, not interactive shell aliases; they preserve arguments, exit status, and signals. Prefix commands with `~/bin/` if that directory is not on your shell's search path. Config selection follows [the documented precedence](configuration.md#changes-and-precedence). A separate verification command does not create a backup or mark missing sources protected.
+`icback`, `icmat`, and `icmail` are installed command symlinks, not interactive shell aliases; they preserve arguments, exit status, and signals. Prefix commands with `~/bin/` if that directory is not on your shell's search path. Backup config selection follows [the documented precedence](configuration.md#changes-and-precedence). A separate verification command does not create a backup or mark missing sources protected.
 
 `download` reports the cloud-only file count and logical size, rejects insufficient immediately free space before starting, reads and authenticates all Restic data, and verifies that every initial candidate became local and readable. Its success is a point-in-time result because macOS may evict files later. It does not promote pending snapshots, clear a backup warning, or mark a failed backup cycle successful.
 
@@ -110,7 +120,7 @@ For a source no longer configured, or recovery without this installation, follow
 
 ## Schedule and alerts
 
-The daily job runs at 03:00 local time and login, with hourly due checks. It requests work if no backup covers the most recent local 03:00, the source configuration changed, or the previous run failed. Successful repeated due checks do not make another backup that day. Login/wake checks catch up missed work when the account next runs; they do not operate while the Mac is off or logged out.
+The backup's daily job runs at 03:00 local time and login, with hourly due checks. It requests work if no backup covers the most recent local 03:00, the source configuration changed, or the previous run failed. Successful repeated due checks do not make another backup that day. Login/wake checks catch up missed work when the account next runs; they do not operate while the Mac is off or logged out.
 
 The independent watchdog runs at login and every six hours. It checks the runner's local status, including missing sources, stale snapshots, changed configuration, interrupted or long-running work, and unloaded jobs. A source more than 36 hours stale is a problem. The watchdog writes the configured warning file and attempts a macOS notification; notifications depend on system settings. A backup cycle that succeeds for all sources clears the warning.
 

@@ -10,7 +10,7 @@ Use Git for completed work and superseded instructions. Keep current outcomes an
 
 ## Source and installation are separate
 
-This checkout is the portable source of truth for code and documentation. It is not the active installation and contains no authoritative machine configuration. Before working on a live installation, follow [Identify the active installation](docs/operations.md#identify-the-active-installation). The installed command's JSON status and private configuration determine the actual sources, paths, and job labels; the example file does not.
+This checkout is the portable source of truth for code and documentation. It is not the active installation and contains no authoritative machine configuration. Before working on a live installation, follow [Identify the active installation](docs/operations.md#identify-the-active-installation). For backup, the installed command's JSON status and private configuration determine the actual sources, paths, and job labels. For mail, `icmail --json status` identifies the selected private routing, backend, and review state; Himalaya owns account configuration and authentication. The materializer has no persistent configuration. Examples do not determine live configuration.
 
 Edit code here, then use the documented installer when deployment is part of the task. Preserve the discovered configuration and label arguments. Do not edit generated runtime copies or plists directly, replace a live config with the example, or run new-install initialization as an update. A docs-only edit does not itself require restarting scheduled jobs.
 

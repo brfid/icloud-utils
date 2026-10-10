@@ -10,7 +10,7 @@ The [mail decision](adr-004-mail.md) defines the optional Himalaya companion. [M
 
 - Restic owns snapshot storage, repository integrity, and retention. The Python runner coordinates it but does not reproduce its storage engine.
 - `icloud-materialize` owns arbitrary-path metadata inspection and complete local reads. It does not acquire backup configuration, scheduling, retention, or recovery responsibilities.
-- The installed backup runner, materializer, and watchdog must still expose useful failure information when either of the other programs is missing or broken.
+- Each installed tool must expose useful diagnostics when unrelated components are missing or broken. The watchdog must report a missing or broken backup runner without importing it.
 - Himalaya owns mail protocols, MIME, and account authentication. The mail adapter owns allowlisted read operations and private per-message review acknowledgments; fetching is distinct from review.
 - Each documentation subject has one owner. Entry points summarize enough to choose a workflow and link to the detailed contract or procedure.
 

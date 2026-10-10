@@ -1,8 +1,10 @@
-# Configuration
+# Backup configuration
 
-The active configuration is a private TOML file selected by the installer. The default is `~/.config/icloud_backup/config.toml`; an existing installation's actual selection is discoverable through [operations](operations.md#identify-the-active-installation). [example.config.toml](../example.config.toml) is a template, never a live source inventory. The installer does not create or overwrite the active configuration.
+The backup's active configuration is a private TOML file selected by its installer. The default is `~/.config/icloud_backup/config.toml`; an existing installation's actual selection is discoverable through [operations](operations.md#identify-the-active-installation). [example.config.toml](../example.config.toml) is a template, never a live source inventory. The backup installer does not create or overwrite the active configuration.
 
 This file configures `icloud-backup` only. `icloud-materialize` has no persistent configuration and requires explicit paths and options on every invocation; see [its contract](materializer.md).
+
+Mail uses separate private toolkit routing in `~/.config/icloud-utils/mail.toml`, with account identity and credentials owned by Himalaya and its credential provider. See [Mail setup and credentials](mail.md#setup-and-credentials) for that schema and the portable routing example.
 
 `load_config()` and `Config` in [icloud_backup.py](../icloud_backup.py) define the accepted schema and defaults. Unknown settings, wrong types, unsafe path overlaps, and invalid source names are rejected. Paths must be absolute or start with `~`; they are resolved before overlap checks. Relative paths are not interpreted against the checkout.
 
